@@ -34,15 +34,18 @@
 # ============================================================================
 
 # ---- 0. Paquets -----------------------------------------------------------
-# install.packages(c("tidyverse","readxl","psych","janitor","writexl",
-#                    "rstatix","effectsize"))
-library(tidyverse)
-library(readxl)
-library(psych)
-library(janitor)
-library(writexl)
-library(rstatix)      # tests tidy i post-hoc (Games-Howell)
-library(effectsize)   # mida de l'efecte (Cohen d, eta2)
+# Aquest bloc instal·la els paquets que faltin i els carrega automàticament.
+# IMPORTANT: executa SEMPRE el script sencer des d'aquí (o fes 'Source').
+paquets <- c("tidyverse","readxl","psych","janitor","writexl",
+             "rstatix","effectsize")
+for (p in paquets) {
+  if (!requireNamespace(p, quietly = TRUE)) {
+    install.packages(p, repos = "https://cloud.r-project.org")
+  }
+  library(p, character.only = TRUE)
+}
+# Comprovació: el pipe %>% ha d'estar disponible
+if (!exists("%>%")) stop("El paquet 'tidyverse' no s'ha carregat. Revisa la instal·lació.")
 
 # ---- 1. Carregar dades ----------------------------------------------------
 fitxer <- "Resultats de la mostra de l'enquesta.xlsx"   # <-- AJUSTA LA RUTA
