@@ -9,7 +9,8 @@
 #  BLOC 1 · FUNCIONAMENT DE LA XARXA  (ítems 1-17, Likert 1-7)
 #     D1  Coherència de propòsit i prioritats ... ít. 1, 2, 3, 4
 #     D2  Contextualització local ............... ít. 5
-#     D3  Comunicació i mediació ................ ít. 6, 7, 8
+#     D3  Comunicació i mediació ................ ít. 7, 8
+#     Dm  Coherència missatges als centres ...... ít. 6 (invertit)
 #     D4  Feedback i aprenentatge ............... ít. 9, 10, 16
 #     D5  Adaptació ............................. ít. 11, 12
 #     D6  Lideratge distribuït .................. ít. 13
@@ -18,15 +19,15 @@
 #     D8  Confiança (eficàcia col·lectiva) ...... ít. 17
 #
 #  BLOC 2 · SENSACIÓ D'ENERGIA I RECUPERACIÓ
-#     Sensació d'energia ....................... ít. 18, 19, 20, 21
+#     Sensació d'energia ....................... ít. 18, 19, 20  (ít.21 ELIMINAT)
 #     Recuperació energètica percebuda ......... ít. 26, 27
 #
 #  ÍTEM 22  (solt) ............... factors que més estrès causen (multiresposta)
 #  ÍTEMS 23, 24, 25 (solts) ...... Trajectòria energètica percebuda (control)
 #
-#  BLOC 3 · ALINEAMENT PROPÒSIT VITAL – PROFESSIÓ ... ít. 28, 29, 30, 31
+#  BLOC 3 · ALINEAMENT PROPÒSIT VITAL – PROFESSIÓ ... ít. 28, 29, 31 (ít.30 ELIMINAT)
 #
-#  ÍTEMS INVERTITS (negatiu -> alt = pitjor): 6, 13, 19, 21, 27, 30
+#  ÍTEMS INVERTITS (negatiu -> alt = pitjor): 6, 13, 19, 27
 #
 #  COM USAR-LO: ajusta la ruta de 'fitxer' i executa de dalt a baix
 #  (Ctrl+Alt+R a RStudio). Els resultats es desen a la carpeta 'sortides/'.
@@ -108,16 +109,15 @@ dades <- dades %>%
   mutate(across(all_of(c(items_bloc1, items_energ, items_prop)), as.numeric))
 
 # ---- 5. Invertir ítems negatius (escala 1-7: invertit = 8 - x) ------------
-# Invertits: 6, 13 (Bloc 1); 19, 21 (energia); 27 (recuperació); 30 (propòsit)
+# Invertits: 6, 13 (Bloc 1); 19 (energia); 27 (recuperació).
+# (ít.21 i ít.30 s'han eliminat de l'anàlisi -> no s'inverteixen.)
 inv <- function(x) 8 - x
 dades <- dades %>%
   mutate(
     coh06_r  = inv(coh06),
     coh13_r  = inv(coh13),
     en19_r   = inv(en19),
-    en21_r   = inv(en21),
-    en27_r   = inv(en27),
-    prop30_r = inv(prop30)
+    en27_r   = inv(en27)
   )
 
 # Vector dels 17 ítems de Bloc 1 amb les versions invertides on cal.
@@ -131,7 +131,8 @@ bloc1_corregits <- c("coh01","coh02","coh03","coh04","coh05",
 dimensions <- list(
   D1_Coherencia_proposit   = c("coh01","coh02","coh03","coh04"),
   D2_Contextualitzacio     = c("coh05"),
-  D3_Comunicacio_mediacio  = c("coh06_r","coh07","coh08"),
+  D3_Comunicacio_mediacio  = c("coh07","coh08"),
+  Dm_Coherencia_missatges  = c("coh06_r"),   # ít.6 com a dimensió pròpia
   D4_Feedback_aprenentatge = c("coh09","coh10","coh16"),
   D5_Adaptacio             = c("coh11","coh12"),
   D6_Lideratge_distribuit  = c("coh13_r"),
@@ -146,22 +147,16 @@ for (nom in names(dimensions)) {
 }
 
 # ---- 7. Índexs dels constructes -------------------------------------------
-# NOTA PSICOMÈTRICA (vegeu diagnòstic):
-#  * "Sensació d'energia" (18-21) NO forma una escala fiable (alpha ~0). L'ít.21
-#    es comporta en sentit contrari a l'esperat. NO en fem un índex promig:
-#    els 4 ítems es reporten individualment. Es manté un índex de Vigor (18+20)
-#    només com a aproximació feble (alpha ~0.42), amb advertència.
-#  * BLOC 3: l'ít.30 (invertit) ensorra l'escala -> calculem AMB i SENSE el 30.
+# Decisions preses:
+#  * Sensació d'energia = 18, 19(inv), 20 (ít.21 eliminat). Escala curta i feble
+#    (alpha ~0.40) però amb tots els ítems en la direcció correcta.
+#  * BLOC 3 = 28, 29, 31 (ít.30 eliminat).
 dades <- dades %>%
   mutate(
-    # BLOC 1 global
     idx_funcionament_xarxa = rowMeans(across(all_of(bloc1_corregits)), na.rm = TRUE),
-    # BLOC 2 - energia: NO índex de 4 ítems. Vigor com a aproximació feble:
-    idx_vigor              = rowMeans(cbind(en18, en20), na.rm = TRUE),
+    idx_energia            = rowMeans(cbind(en18, en19_r, en20), na.rm = TRUE),
     idx_recuperacio        = rowMeans(cbind(en26, en27_r), na.rm = TRUE),
-    # BLOC 3 - dues versions:
-    idx_alineament_amb30   = rowMeans(cbind(prop28, prop29, prop30_r, prop31), na.rm = TRUE),
-    idx_alineament_sense30 = rowMeans(cbind(prop28, prop29, prop31), na.rm = TRUE)
+    idx_alineament_proposit= rowMeans(cbind(prop28, prop29, prop31), na.rm = TRUE)
   )
 
 # ---- 8. Fiabilitat (alpha de Cronbach) ------------------------------------
@@ -175,20 +170,13 @@ alpha_segur <- function(df, items, etiqueta) {
 }
 
 cat("\n--- Fiabilitat dels constructes ---\n")
-alpha_segur(dades, bloc1_corregits,                   "BLOC 1 Funcionament xarxa")
-alpha_segur(dades, c("en18","en19_r","en20","en21_r"),"Energia 18-21 (NO fiable)")
-alpha_segur(dades, c("en18","en20"),                  "  > Vigor (18+20)")
-alpha_segur(dades, c("en19_r","en21_r"),              "  > Esgotament (19+21)")
-alpha_segur(dades, c("en26","en27_r"),                "Recuperació energètica")
-cat("BLOC 3 Alineament propòsit -> comparació amb/sense ít.30:\n")
-alpha_segur(dades, c("prop28","prop29","prop30_r","prop31"), "  amb ít.30 (invertit)")
-alpha_segur(dades, c("prop28","prop29","prop31"),           "  sense ít.30")
+alpha_segur(dades, bloc1_corregits,                "BLOC 1 Funcionament xarxa")
+alpha_segur(dades, c("en18","en19_r","en20"),      "Sensació d'energia (18,19r,20)")
+alpha_segur(dades, c("en26","en27_r"),             "Recuperació energètica")
+alpha_segur(dades, c("prop28","prop29","prop31"),  "BLOC 3 Alineament propòsit")
 
 cat("\n--- Fiabilitat per dimensió (Bloc 1) ---\n")
 for (nom in names(dimensions)) alpha_segur(dades, dimensions[[nom]], nom)
-cat("Comparació D3 Comunicació amb/sense ít.6:\n")
-alpha_segur(dades, c("coh06_r","coh07","coh08"), "  amb ít.6 (invertit)")
-alpha_segur(dades, c("coh07","coh08"),           "  sense ít.6 (7+8)")
 
 # ---- 9. Descriptius dels ítems de Bloc 1 ----------------------------------
 desc_bloc1 <- dades %>%
@@ -201,7 +189,7 @@ print(desc_bloc1)
 # Descriptius dels ítems d'energia 18-21 (es reporten individualment perquè
 # NO formen una escala fiable) i de recuperació/propòsit.
 desc_energia <- dades %>%
-  select(en18, en19, en20, en21, en26, en27, prop28, prop29, prop30, prop31) %>%
+  select(en18, en19, en20, en26, en27, prop28, prop29, prop31) %>%
   psych::describe() %>% as.data.frame() %>%
   rownames_to_column("item") %>%
   select(item, n, mean, sd, min, max)
@@ -249,9 +237,9 @@ print(janitor::tabyl(dades, q24_anys_rol))
 # EeX, EdD, DocenciaDirecta...
 resum_per_segment <- function(df, segment,
                               constructes = c("idx_funcionament_xarxa",
-                                              "idx_vigor",
+                                              "idx_energia",
                                               "idx_recuperacio",
-                                              "idx_alineament_sense30")) {
+                                              "idx_alineament_proposit")) {
   df %>%
     group_by(across(all_of(segment))) %>%
     summarise(n = n(),
