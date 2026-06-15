@@ -146,15 +146,22 @@ for (nom in names(dimensions)) {
 }
 
 # ---- 7. Índexs dels constructes -------------------------------------------
+# NOTA PSICOMÈTRICA (vegeu diagnòstic):
+#  * "Sensació d'energia" (18-21) NO forma una escala fiable (alpha ~0). L'ít.21
+#    es comporta en sentit contrari a l'esperat. NO en fem un índex promig:
+#    els 4 ítems es reporten individualment. Es manté un índex de Vigor (18+20)
+#    només com a aproximació feble (alpha ~0.42), amb advertència.
+#  * BLOC 3: l'ít.30 (invertit) ensorra l'escala -> calculem AMB i SENSE el 30.
 dades <- dades %>%
   mutate(
     # BLOC 1 global
     idx_funcionament_xarxa = rowMeans(across(all_of(bloc1_corregits)), na.rm = TRUE),
-    # BLOC 2
-    idx_sensacio_energia   = rowMeans(cbind(en18, en19_r, en20, en21_r), na.rm = TRUE),
+    # BLOC 2 - energia: NO índex de 4 ítems. Vigor com a aproximació feble:
+    idx_vigor              = rowMeans(cbind(en18, en20), na.rm = TRUE),
     idx_recuperacio        = rowMeans(cbind(en26, en27_r), na.rm = TRUE),
-    # BLOC 3
-    idx_alineament_proposit= rowMeans(cbind(prop28, prop29, prop30_r, prop31), na.rm = TRUE)
+    # BLOC 3 - dues versions:
+    idx_alineament_amb30   = rowMeans(cbind(prop28, prop29, prop30_r, prop31), na.rm = TRUE),
+    idx_alineament_sense30 = rowMeans(cbind(prop28, prop29, prop31), na.rm = TRUE)
   )
 
 # ---- 8. Fiabilitat (alpha de Cronbach) ------------------------------------
@@ -168,12 +175,20 @@ alpha_segur <- function(df, items, etiqueta) {
 }
 
 cat("\n--- Fiabilitat dels constructes ---\n")
-alpha_segur(dades, bloc1_corregits,                  "BLOC 1 Funcionament xarxa")
-alpha_segur(dades, c("en18","en19_r","en20","en21_r"),"Sensació d'energia")
+alpha_segur(dades, bloc1_corregits,                   "BLOC 1 Funcionament xarxa")
+alpha_segur(dades, c("en18","en19_r","en20","en21_r"),"Energia 18-21 (NO fiable)")
+alpha_segur(dades, c("en18","en20"),                  "  > Vigor (18+20)")
+alpha_segur(dades, c("en19_r","en21_r"),              "  > Esgotament (19+21)")
 alpha_segur(dades, c("en26","en27_r"),                "Recuperació energètica")
-alpha_segur(dades, c("prop28","prop29","prop30_r","prop31"), "BLOC 3 Alineament propòsit")
+cat("BLOC 3 Alineament propòsit -> comparació amb/sense ít.30:\n")
+alpha_segur(dades, c("prop28","prop29","prop30_r","prop31"), "  amb ít.30 (invertit)")
+alpha_segur(dades, c("prop28","prop29","prop31"),           "  sense ít.30")
+
 cat("\n--- Fiabilitat per dimensió (Bloc 1) ---\n")
 for (nom in names(dimensions)) alpha_segur(dades, dimensions[[nom]], nom)
+cat("Comparació D3 Comunicació amb/sense ít.6:\n")
+alpha_segur(dades, c("coh06_r","coh07","coh08"), "  amb ít.6 (invertit)")
+alpha_segur(dades, c("coh07","coh08"),           "  sense ít.6 (7+8)")
 
 # ---- 9. Descriptius dels ítems de Bloc 1 ----------------------------------
 desc_bloc1 <- dades %>%
@@ -182,6 +197,15 @@ desc_bloc1 <- dades %>%
   rownames_to_column("item") %>%
   select(item, n, mean, sd, min, max)
 print(desc_bloc1)
+
+# Descriptius dels ítems d'energia 18-21 (es reporten individualment perquè
+# NO formen una escala fiable) i de recuperació/propòsit.
+desc_energia <- dades %>%
+  select(en18, en19, en20, en21, en26, en27, prop28, prop29, prop30, prop31) %>%
+  psych::describe() %>% as.data.frame() %>%
+  rownames_to_column("item") %>%
+  select(item, n, mean, sd, min, max)
+print(desc_energia)
 
 # Descriptius de tots els índexs/dimensions
 desc_indexs <- dades %>%
@@ -225,9 +249,9 @@ print(janitor::tabyl(dades, q24_anys_rol))
 # EeX, EdD, DocenciaDirecta...
 resum_per_segment <- function(df, segment,
                               constructes = c("idx_funcionament_xarxa",
-                                              "idx_sensacio_energia",
+                                              "idx_vigor",
                                               "idx_recuperacio",
-                                              "idx_alineament_proposit")) {
+                                              "idx_alineament_sense30")) {
   df %>%
     group_by(across(all_of(segment))) %>%
     summarise(n = n(),
@@ -279,6 +303,7 @@ ggsave("sortides/factors_estres.png", g3, width = 8, height = 6, dpi = 150)
 write_xlsx(
   list(
     "Descriptius_items_bloc1" = desc_bloc1,
+    "Descriptius_energia_prop"= desc_energia,
     "Descriptius_constructes" = desc_indexs,
     "Freq_etapes"             = freq_etapes,
     "Freq_ambits"             = freq_ambits,
