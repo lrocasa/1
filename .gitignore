@@ -5,3 +5,8 @@
 *.rds
 *.RData
 /sortides/
+
+# Sortides renderitzades de l-informe
+*.html
+*.pdf
+/informe_enquesta_files/

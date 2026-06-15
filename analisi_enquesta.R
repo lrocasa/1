@@ -364,17 +364,19 @@ compara_segment <- function(df, seg, constructes = constructes_clau,
     if (k == 2) {
       tt <- t.test(y ~ grp, data = d)
       mw <- suppressWarnings(wilcox.test(y ~ grp, data = d))
-      es <- effectsize::cohens_d(y ~ grp, data = d)$Cohens_d
+      es <- effectsize::cohens_d(y ~ grp, data = d)        # amb IC 95%
       tibble(segmentador = seg, construct = v, k = k, n = nrow(d),
              test = "Welch t", p = tt$p.value, p_noparam = mw$p.value,
-             efecte = abs(es), mesura = "Cohen d")
+             efecte = abs(es$Cohens_d), ef_ic_low = es$CI_low,
+             ef_ic_high = es$CI_high, mesura = "Cohen d")
     } else {
       wa <- oneway.test(y ~ grp, data = d)
       kw <- kruskal.test(y ~ grp, data = d)
-      es <- effectsize::eta_squared(aov(y ~ grp, data = d), partial = FALSE)$Eta2[1]
+      es <- effectsize::eta_squared(aov(y ~ grp, data = d), partial = FALSE) # amb IC
       tibble(segmentador = seg, construct = v, k = k, n = nrow(d),
              test = "Welch ANOVA", p = wa$p.value, p_noparam = kw$p.value,
-             efecte = es, mesura = "eta2")
+             efecte = es$Eta2[1], ef_ic_low = es$CI_low[1],
+             ef_ic_high = es$CI_high[1], mesura = "eta2")
     }
   }) %>%
     mutate(p_adj = p.adjust(p, method = "holm"),
@@ -388,9 +390,20 @@ compara_segment <- function(df, seg, constructes = constructes_clau,
 
 # ---- B3. Taula global de tests --------------------------------------------
 taula_tests <- map_dfr(segmentadors, ~ compara_segment(dades, .x)) %>%
-  mutate(across(c(p, p_noparam, p_adj, efecte), ~ round(.x, 4)))
-cat("\n===== TESTS PER SEGMENTADOR (p_adj = Holm dins de cada segmentador) =====\n")
+  mutate(across(c(p, p_noparam, p_adj, efecte, ef_ic_low, ef_ic_high),
+                ~ round(.x, 4)))
+cat("\n===== TESTS PER SEGMENTADOR (4 constructes globals) =====\n")
+cat("p_adj = Holm dins de cada segmentador; efecte amb IC 95%\n")
 print(as.data.frame(taula_tests), row.names = FALSE)
+
+# ---- B3b. Mateixos tests a nivell de DIMENSIONS (D1-D8, Dm) ----------------
+dims_cols <- names(dimensions)   # columnes d'índex de dimensió creades a la secció 6
+taula_tests_dim <- map_dfr(segmentadors,
+                           ~ compara_segment(dades, .x, constructes = dims_cols)) %>%
+  mutate(across(c(p, p_noparam, p_adj, efecte, ef_ic_low, ef_ic_high),
+                ~ round(.x, 4)))
+cat("\n===== TESTS PER SEGMENTADOR (dimensions del Bloc 1) =====\n")
+print(as.data.frame(taula_tests_dim), row.names = FALSE)
 
 # ---- B4. Post-hoc (Games-Howell) per als omnibus significatius (k>2) ------
 significatius <- taula_tests %>% filter(k > 2, p_adj < 0.05)
@@ -445,9 +458,43 @@ for (seg in segmentadors)
   ggsave(paste0("sortides/segment_", seg, ".png"), graf_segment(dades, seg),
          width = 9, height = 6, dpi = 150)
 
+# ---- B8. Factors d'estrès (ítem 22) per segmentador -----------------------
+# % de cada grup que marca cada factor + test d'associació (chi-quadrat;
+# Fisher si hi ha cel·les esperades petites). Correcció BH per segmentador.
+estres_pct_segment <- function(df, seg) {
+  df %>% filter(!is.na(.data[[seg]])) %>%
+    group_by(grup = .data[[seg]]) %>%
+    summarise(n = n(),
+              across(all_of(vars_estres), ~ round(100 * mean(.x, na.rm = TRUE), 1)),
+              .groups = "drop") %>%
+    mutate(segmentador = seg, .before = 1)
+}
+estres_tests_segment <- function(df, seg, min_cell = 5) {
+  d <- df %>% filter(!is.na(.data[[seg]])) %>%
+    group_by(grp = .data[[seg]]) %>% filter(n() >= min_cell) %>%
+    ungroup() %>% mutate(grp = droplevels(factor(grp)))
+  map_dfr(vars_estres, function(f) {
+    tb <- table(d$grp, d[[f]])
+    if (ncol(tb) < 2 || nrow(tb) < 2) return(tibble(segmentador=seg, factor=f, p=NA_real_))
+    p <- tryCatch(suppressWarnings(chisq.test(tb)$p.value),
+                  error = function(e) tryCatch(fisher.test(tb)$p.value,
+                                               error = function(e) NA_real_))
+    tibble(segmentador = seg, factor = f, p = p)
+  }) %>% mutate(p_adj = p.adjust(p, method = "BH"))
+}
+estres_pct  <- map(segmentadors, ~ estres_pct_segment(dades, .x)) %>%
+  setNames(segmentadors)
+estres_tests <- map_dfr(segmentadors, ~ estres_tests_segment(dades, .x)) %>%
+  mutate(across(c(p, p_adj), ~ round(.x, 4)))
+cat("\n===== FACTORS D'ESTRÈS (ít.22) x SEGMENTADOR: tests d'associació =====\n")
+print(as.data.frame(filter(estres_tests, !is.na(p))), row.names = FALSE)
+
 # ---- B7. Exportar resultats inferencials ----------------------------------
-fulls_export <- c(list("Tests_omnibus" = taula_tests),
+fulls_export <- c(list("Tests_constructes" = taula_tests,
+                       "Tests_dimensions"  = taula_tests_dim,
+                       "Estres_tests"      = estres_tests),
                   setNames(taules_mitjanes, paste0("Mitj_", segmentadors)),
+                  setNames(estres_pct, substr(paste0("Estres_", segmentadors), 1, 31)),
                   if (length(posthoc_list)) setNames(
                     lapply(posthoc_list, as.data.frame),
                     substr(paste0("PH_", names(posthoc_list)), 1, 31)))
