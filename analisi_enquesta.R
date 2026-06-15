@@ -34,12 +34,15 @@
 # ============================================================================
 
 # ---- 0. Paquets -----------------------------------------------------------
-# install.packages(c("tidyverse","readxl","psych","janitor","writexl"))
+# install.packages(c("tidyverse","readxl","psych","janitor","writexl",
+#                    "rstatix","effectsize"))
 library(tidyverse)
 library(readxl)
 library(psych)
 library(janitor)
 library(writexl)
+library(rstatix)      # tests tidy i post-hoc (Games-Howell)
+library(effectsize)   # mida de l'efecte (Cohen d, eta2)
 
 # ---- 1. Carregar dades ----------------------------------------------------
 fitxer <- "Resultats de la mostra de l'enquesta.xlsx"   # <-- AJUSTA LA RUTA
@@ -302,4 +305,146 @@ write_xlsx(
   "sortides/resultats_analisi.xlsx"
 )
 
-cat("\nFet! Revisa la carpeta 'sortides/' (gràfics .png i resultats_analisi.xlsx)\n")
+# ===========================================================================
+#  PART B · ANÀLISI PER SEGMENTADORS  (tests + mida de l'efecte + correcció)
+# ===========================================================================
+
+# ---- B1. Preparar les variables de segment --------------------------------
+dades <- dades %>%
+  mutate(
+    # Complexitat en 4 trams
+    Complexitat_grup = cut(as.numeric(Complexitat),
+                           breaks = c(-Inf, 0.30, 0.50, 0.60, Inf),
+                           labels = c("0-0,30","0,31-0,50","0,51-0,60","0,61-1")),
+    # Servei Territorial: "0" = Central/FECC; serveis amb n<6 -> "Altres ST"
+    ServeiTerr_grup = ServeiTerritorial %>% as.character() %>%
+      dplyr::recode("0" = "Central/FECC") %>% replace_na("(sense dada)") %>%
+      factor() %>% fct_lump_min(min = 6, other_level = "Altres ST"),
+    # Indicadors 0/1 -> No/Sí
+    EeX_f    = factor(EeX,    levels = c(0,1), labels = c("No","Sí")),
+    EeXAMC_f = factor(EeXAMC, levels = c(0,1), labels = c("No","Sí")),
+    EdD_f    = factor(EdD,    levels = c(0,1), labels = c("No","Sí")),
+
+    # >>> Cargo agrupat: EDITA aquests grups segons la teva classificació <<<
+    Cargo_grup = fct_collapse(factor(Cargo),
+      "Equip directiu" = c("Director General","Subdirector","Cap Estudis ESO",
+                           "Cap Estudis Primaria","Cap Estudis Batxillerat",
+                           "Coordinador Infantil"),
+      "Titularitat"    = c("Titular"),
+      "FECC/Fundació"  = c("FECC","APSEC","Responsable de xarxa","Comité d'ètica",
+                           "GdE Indicadors","COCOBE","CCAPAC","APPEC"),
+      "Professorat"    = c("Professor o mestre","GdE Àmbit digital","Pastoral","TIC",
+                           "GdE Matemàtiques","GdE Comprensió lectora",
+                           "GdE Identitat Curricular","PAS","Mestre de Primària",
+                           "Mestre/a","GdE Cura","Orientador (DOP)"))
+  )
+
+constructes_clau <- c("idx_funcionament_xarxa","idx_energia",
+                      "idx_recuperacio","idx_alineament_proposit")
+segmentadors <- c("ServeiTerr_grup","Complexitat_grup","Cargo_grup",
+                  "EeX_f","EeXAMC_f","EdD_f")
+
+# ---- B2. Funció d'anàlisi: omnibus + mida d'efecte + correcció ------------
+# 2 grups  -> Welch t-test (+ Mann-Whitney) i Cohen d
+# 3+ grups -> Welch ANOVA  (+ Kruskal-Wallis) i eta2
+# La correcció de Holm s'aplica DINS de cada segmentador (família de 4 tests).
+compara_segment <- function(df, seg, constructes = constructes_clau) {
+  map_dfr(constructes, function(v) {
+    d <- df %>% transmute(grp = droplevels(factor(.data[[seg]])),
+                          y = .data[[v]]) %>% drop_na()
+    k <- nlevels(d$grp)
+    if (k < 2 || nrow(d) < 10) return(NULL)
+    if (k == 2) {
+      tt <- t.test(y ~ grp, data = d)
+      mw <- suppressWarnings(wilcox.test(y ~ grp, data = d))
+      es <- effectsize::cohens_d(y ~ grp, data = d)$Cohens_d
+      tibble(segmentador = seg, construct = v, k = k, n = nrow(d),
+             test = "Welch t", p = tt$p.value, p_noparam = mw$p.value,
+             efecte = abs(es), mesura = "Cohen d")
+    } else {
+      wa <- oneway.test(y ~ grp, data = d)
+      kw <- kruskal.test(y ~ grp, data = d)
+      es <- effectsize::eta_squared(aov(y ~ grp, data = d), partial = FALSE)$Eta2[1]
+      tibble(segmentador = seg, construct = v, k = k, n = nrow(d),
+             test = "Welch ANOVA", p = wa$p.value, p_noparam = kw$p.value,
+             efecte = es, mesura = "eta2")
+    }
+  }) %>%
+    mutate(p_adj = p.adjust(p, method = "holm"),
+           sig = cut(p_adj, c(-Inf, .001, .01, .05, Inf),
+                     labels = c("***","**","*","ns")))
+}
+
+# Interpretació orientativa de la mida d'efecte:
+#   Cohen d: 0.2 petit · 0.5 mitjà · 0.8 gran
+#   eta2:    0.01 petit · 0.06 mitjà · 0.14 gran
+
+# ---- B3. Taula global de tests --------------------------------------------
+taula_tests <- map_dfr(segmentadors, ~ compara_segment(dades, .x)) %>%
+  mutate(across(c(p, p_noparam, p_adj, efecte), ~ round(.x, 4)))
+cat("\n===== TESTS PER SEGMENTADOR (p_adj = Holm dins de cada segmentador) =====\n")
+print(as.data.frame(taula_tests), row.names = FALSE)
+
+# ---- B4. Post-hoc (Games-Howell) per als omnibus significatius (k>2) ------
+significatius <- taula_tests %>% filter(k > 2, p_adj < 0.05)
+posthoc_list <- list()
+if (nrow(significatius) > 0) {
+  for (i in seq_len(nrow(significatius))) {
+    seg <- significatius$segmentador[i]; v <- significatius$construct[i]
+    d <- dades %>% transmute(grp = droplevels(factor(.data[[seg]])),
+                             y = .data[[v]]) %>% drop_na()
+    ph <- rstatix::games_howell_test(d, y ~ grp)
+    cat(sprintf("\n--- Post-hoc Games-Howell: %s ~ %s ---\n", v, seg))
+    print(ph %>% select(group1, group2, estimate, p.adj, p.adj.signif))
+    posthoc_list[[paste(v, seg, sep = "__")]] <- ph
+  }
+} else cat("\n(Cap omnibus de 3+ grups significatiu després de la correcció.)\n")
+
+# ---- B5. Mitjanes (amb DE i n) per grup, per a cada segmentador -----------
+mitjanes_segment <- function(df, seg, constructes = constructes_clau) {
+  df %>% filter(!is.na(.data[[seg]])) %>%
+    group_by(grup = .data[[seg]]) %>%
+    summarise(n = n(),
+              across(all_of(constructes),
+                     list(m = ~round(mean(.x, na.rm = TRUE), 2),
+                          de = ~round(sd(.x, na.rm = TRUE), 2))),
+              .groups = "drop") %>%
+    mutate(segmentador = seg, .before = 1)
+}
+taules_mitjanes <- map(segmentadors, ~ mitjanes_segment(dades, .x))
+names(taules_mitjanes) <- segmentadors
+walk(taules_mitjanes, ~ print(as.data.frame(.x), row.names = FALSE))
+
+# ---- B6. Gràfic: mitjana dels constructes per cada segmentador ------------
+graf_segment <- function(df, seg) {
+  df %>% filter(!is.na(.data[[seg]])) %>%
+    select(grp = all_of(seg), all_of(constructes_clau)) %>%
+    pivot_longer(-grp, names_to = "construct", values_to = "valor") %>%
+    group_by(grp, construct) %>%
+    summarise(m = mean(valor, na.rm = TRUE),
+              se = sd(valor, na.rm = TRUE)/sqrt(sum(!is.na(valor))), .groups="drop") %>%
+    ggplot(aes(grp, m)) +
+    geom_col(fill = "#4575b4") +
+    geom_errorbar(aes(ymin = m-se, ymax = m+se), width = .2) +
+    facet_wrap(~ construct, scales = "free_y") +
+    coord_cartesian(ylim = c(1, 7)) +
+    labs(title = paste("Constructes per", seg), x = NULL, y = "Mitjana (1-7)") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1))
+}
+for (seg in segmentadors)
+  ggsave(paste0("sortides/segment_", seg, ".png"), graf_segment(dades, seg),
+         width = 9, height = 6, dpi = 150)
+
+# ---- B7. Exportar resultats inferencials ----------------------------------
+fulls_export <- c(list("Tests_omnibus" = taula_tests),
+                  setNames(taules_mitjanes, paste0("Mitj_", segmentadors)),
+                  if (length(posthoc_list)) setNames(
+                    lapply(posthoc_list, as.data.frame),
+                    substr(paste0("PH_", names(posthoc_list)), 1, 31)))
+write_xlsx(fulls_export, "sortides/resultats_segmentadors.xlsx")
+
+cat("\nFet! Revisa la carpeta 'sortides/':\n",
+    " - resultats_analisi.xlsx (descriptius i fiabilitat)\n",
+    " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
+    " - gràfics .png\n")
