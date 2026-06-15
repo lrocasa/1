@@ -337,7 +337,7 @@ dades <- dades %>%
       "Entitat FECC"   = c("APSEC","CCAPAC","APPEC"),
       "GdE"            = c("GdE Àmbit digital","GdE Matemàtiques","GdE Comprensió lectora",
                            "GdE Identitat Curricular","GdE Indicadors","GdE Cura"),
-      "FECC/Fundació"  = c("Responsable de xarxa"),
+      "Responsables de xarxa" = c("Responsable de xarxa"),
       "Comité d'ètica" = c("Comité d'ètica"),
       "PAS"            = c("PAS"))
   )
