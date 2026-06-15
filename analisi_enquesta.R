@@ -325,18 +325,21 @@ dades <- dades %>%
     EeXAMC_f = factor(EeXAMC, levels = c(0,1), labels = c("No","Sí")),
     EdD_f    = factor(EdD,    levels = c(0,1), labels = c("No","Sí")),
 
-    # >>> Cargo agrupat: EDITA aquests grups segons la teva classificació <<<
+    # Cargo agrupat segons la classificació definida (9 grups)
     Cargo_grup = fct_collapse(factor(Cargo),
-      "Equip directiu" = c("Director General","Subdirector","Cap Estudis ESO",
+      "Titularitat"    = c("Titular"),
+      "Equip directiu" = c("Director General","Cap Estudis ESO","Subdirector",
                            "Cap Estudis Primaria","Cap Estudis Batxillerat",
                            "Coordinador Infantil"),
-      "Titularitat"    = c("Titular"),
-      "FECC/Fundació"  = c("FECC","APSEC","Responsable de xarxa","Comité d'ètica",
-                           "GdE Indicadors","COCOBE","CCAPAC","APPEC"),
-      "Professorat"    = c("Professor o mestre","GdE Àmbit digital","Pastoral","TIC",
-                           "GdE Matemàtiques","GdE Comprensió lectora",
-                           "GdE Identitat Curricular","PAS","Mestre de Primària",
-                           "Mestre/a","GdE Cura","Orientador (DOP)"))
+      "Personal FECC"  = c("FECC"),
+      "Professorat"    = c("Professor o mestre","Pastoral","TIC","Mestre de Primària",
+                           "Mestre/a","Orientador (DOP)","COCOBE"),
+      "Entitat FECC"   = c("APSEC","CCAPAC","APPEC"),
+      "GdE"            = c("GdE Àmbit digital","GdE Matemàtiques","GdE Comprensió lectora",
+                           "GdE Identitat Curricular","GdE Indicadors","GdE Cura"),
+      "FECC/Fundació"  = c("Responsable de xarxa"),
+      "Comité d'ètica" = c("Comité d'ètica"),
+      "PAS"            = c("PAS"))
   )
 
 constructes_clau <- c("idx_funcionament_xarxa","idx_energia",
@@ -348,10 +351,14 @@ segmentadors <- c("ServeiTerr_grup","Complexitat_grup","Cargo_grup",
 # 2 grups  -> Welch t-test (+ Mann-Whitney) i Cohen d
 # 3+ grups -> Welch ANOVA  (+ Kruskal-Wallis) i eta2
 # La correcció de Holm s'aplica DINS de cada segmentador (família de 4 tests).
-compara_segment <- function(df, seg, constructes = constructes_clau) {
+compara_segment <- function(df, seg, constructes = constructes_clau,
+                            min_cell = 3) {
   map_dfr(constructes, function(v) {
     d <- df %>% transmute(grp = droplevels(factor(.data[[seg]])),
                           y = .data[[v]]) %>% drop_na()
+    # treure del test els grups amb menys de 'min_cell' casos (p.ex. PAS = 1)
+    d <- d %>% group_by(grp) %>% filter(n() >= min_cell) %>%
+      ungroup() %>% mutate(grp = droplevels(grp))
     k <- nlevels(d$grp)
     if (k < 2 || nrow(d) < 10) return(NULL)
     if (k == 2) {
@@ -392,7 +399,9 @@ if (nrow(significatius) > 0) {
   for (i in seq_len(nrow(significatius))) {
     seg <- significatius$segmentador[i]; v <- significatius$construct[i]
     d <- dades %>% transmute(grp = droplevels(factor(.data[[seg]])),
-                             y = .data[[v]]) %>% drop_na()
+                             y = .data[[v]]) %>% drop_na() %>%
+      group_by(grp) %>% filter(n() >= 3) %>% ungroup() %>%
+      mutate(grp = droplevels(grp))
     ph <- rstatix::games_howell_test(d, y ~ grp)
     cat(sprintf("\n--- Post-hoc Games-Howell: %s ~ %s ---\n", v, seg))
     print(ph %>% select(group1, group2, estimate, p.adj, p.adj.signif))
