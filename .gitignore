@@ -1,0 +1,7 @@
+# Dades amb informació personal: no pujar al repositori
+*.xlsx
+*.xls
+*.csv
+*.rds
+*.RData
+/sortides/
