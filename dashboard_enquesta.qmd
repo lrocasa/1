@@ -1,0 +1,219 @@
+---
+title: "Dashboard · Enquesta de coherència (FECC)"
+format:
+  dashboard:
+    theme: cosmo
+    nav-buttons: [github]
+    embed-resources: true
+lang: ca
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+# El dashboard reutilitza tot el càlcul d'analisi_enquesta.R.
+# Ha d'estar a la mateixa carpeta que el script i el fitxer Excel.
+source("analisi_enquesta.R")
+
+# Paquets addicionals per a la interactivitat (s'instal·len si falten)
+for (p in c("plotly","DT")) {
+  if (!requireNamespace(p, quietly = TRUE))
+    install.packages(p, repos = "https://cloud.r-project.org")
+  library(p, character.only = TRUE)
+}
+
+# Valors per a les targetes KPI
+n_resp   <- nrow(dades)
+pct_doc  <- round(100 * mean(dades$DocenciaDirecta == "Sí", na.rm = TRUE))
+a_bloc1  <- round(psych::alpha(dades[, bloc1_corregits], warnings = FALSE)$total$raw_alpha, 2)
+m_fx     <- round(mean(dades$idx_funcionament_xarxa,  na.rm = TRUE), 2)
+m_en     <- round(mean(dades$idx_energia,             na.rm = TRUE), 2)
+m_rec    <- round(mean(dades$idx_recuperacio,         na.rm = TRUE), 2)
+m_prop   <- round(mean(dades$idx_alineament_proposit, na.rm = TRUE), 2)
+
+# Paleta i tema comú dels gràfics
+tema <- theme_minimal(base_size = 12)
+pal  <- "#2c7fb8"
+
+# Funció: gràfic interactiu de mitjanes d'un constructe per segmentador
+graf_seg_int <- function(seg, constructe, titol) {
+  d <- dades %>% filter(!is.na(.data[[seg]])) %>%
+    group_by(grup = .data[[seg]]) %>%
+    summarise(mitjana = mean(.data[[constructe]], na.rm = TRUE),
+              n = n(), .groups = "drop") %>%
+    arrange(desc(mitjana))
+  g <- ggplot(d, aes(reorder(grup, mitjana), mitjana,
+                     text = paste0(grup, "\nMitjana: ", round(mitjana,2), "\nn = ", n))) +
+    geom_col(fill = pal) + coord_flip(ylim = c(1, 7)) +
+    labs(x = NULL, y = "Mitjana (1-7)", title = titol) + tema
+  ggplotly(g, tooltip = "text")
+}
+```
+
+# Resum
+
+## Row {height=20%}
+
+```{r}
+#| content: valuebox
+#| title: "Respostes"
+list(icon = "people-fill", color = "primary", value = n_resp)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Amb docència directa"
+list(icon = "easel-fill", color = "info", value = paste0(pct_doc, "%"))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Fiabilitat Bloc 1 (α)"
+list(icon = "check-circle-fill",
+     color = if (a_bloc1 >= 0.7) "success" else "warning", value = a_bloc1)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Funcionament xarxa"
+list(icon = "diagram-3-fill", color = "light", value = m_fx)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Energia"
+list(icon = "lightning-fill", color = "light", value = m_en)
+```
+
+```{r}
+#| content: valuebox
+#| title: "Alineament propòsit"
+list(icon = "compass-fill", color = "light", value = m_prop)
+```
+
+## Row {height=80%}
+
+### Column {width=60%}
+
+```{r}
+#| title: "Bloc 1 · Mitjana per dimensió"
+d <- desc_indexs %>% filter(str_starts(construct, "D")) %>%
+  mutate(construct = reorder(construct, mean))
+g <- ggplot(d, aes(mean, construct,
+                   text = paste0(construct, "\nMitjana: ", round(mean,2)))) +
+  geom_col(fill = "#1c9099") + xlim(0, 7.5) +
+  labs(x = "Mitjana (1-7)", y = NULL) + tema
+ggplotly(g, tooltip = "text")
+```
+
+### Column {width=40%}
+
+```{r}
+#| title: "Constructes globals"
+d <- tibble(
+  Constructe = c("Funcionament xarxa","Energia","Recuperació","Alineament propòsit"),
+  Mitjana = c(m_fx, m_en, m_rec, m_prop))
+g <- ggplot(d, aes(Mitjana, reorder(Constructe, Mitjana),
+                   text = paste0(Constructe, "\n", Mitjana))) +
+  geom_col(fill = pal) + xlim(0, 7.5) + labs(x = "Mitjana (1-7)", y = NULL) + tema
+ggplotly(g, tooltip = "text")
+```
+
+# Bloc 1 · Detall
+
+## Row
+
+### Column {width=55%}
+
+```{r}
+#| title: "Mitjana per ítem (1-17)"
+d <- desc_bloc1 %>% mutate(item = reorder(item, mean))
+g <- ggplot(d, aes(mean, item,
+                   text = paste0(item, "\nMitjana: ", round(mean,2), "\nn = ", n))) +
+  geom_col(fill = pal) + xlim(0, 7.5) + labs(x = "Mitjana (1-7)", y = NULL) + tema
+ggplotly(g, tooltip = "text")
+```
+
+### Column {width=45%}
+
+```{r}
+#| title: "Descriptius dels constructes i dimensions"
+datatable(desc_indexs, options = list(pageLength = 12, dom = "tip"),
+          rownames = FALSE) %>%
+  formatRound(c("mean","sd","min","max"), 2)
+```
+
+# Segmentadors {.tabset}
+
+## Servei Territorial
+
+```{r}
+#| title: "Funcionament de la xarxa per Servei Territorial"
+graf_seg_int("ServeiTerr_grup", "idx_funcionament_xarxa", "")
+```
+
+```{r}
+#| title: "Energia per Servei Territorial"
+graf_seg_int("ServeiTerr_grup", "idx_energia", "")
+```
+
+## Complexitat
+
+```{r}
+#| title: "Funcionament de la xarxa per Complexitat"
+graf_seg_int("Complexitat_grup", "idx_funcionament_xarxa", "")
+```
+
+```{r}
+#| title: "Energia per Complexitat"
+graf_seg_int("Complexitat_grup", "idx_energia", "")
+```
+
+## Cargo
+
+```{r}
+#| title: "Funcionament de la xarxa per Cargo"
+graf_seg_int("Cargo_grup", "idx_funcionament_xarxa", "")
+```
+
+```{r}
+#| title: "Energia per Cargo"
+graf_seg_int("Cargo_grup", "idx_energia", "")
+```
+
+## Taula de tests
+
+```{r}
+#| title: "Tests per segmentador (constructes i dimensions)"
+tots_tests <- bind_rows(taula_tests, taula_tests_dim)
+datatable(tots_tests, filter = "top", rownames = FALSE,
+          options = list(pageLength = 15)) %>%
+  formatRound(c("p","p_noparam","p_adj","efecte","ef_ic_low","ef_ic_high"), 3)
+```
+
+# Factors d'estrès
+
+## Row
+
+### Column {width=55%}
+
+```{r}
+#| title: "% que marca cada factor (ítem 22)"
+d <- freq_estres %>% mutate(categoria = reorder(categoria, n))
+g <- ggplot(d, aes(pct, categoria,
+                   text = paste0(categoria, "\n", n, " respostes (", pct, "%)"))) +
+  geom_col(fill = "#d95f0e") + labs(x = "% de respostes", y = NULL) + tema
+ggplotly(g, tooltip = "text")
+```
+
+### Column {width=45%}
+
+```{r}
+#| title: "Associació amb els segmentadors (p)"
+datatable(filter(estres_tests, !is.na(p)), filter = "top", rownames = FALSE,
+          options = list(pageLength = 15)) %>%
+  formatRound(c("p","p_adj"), 3)
+```
