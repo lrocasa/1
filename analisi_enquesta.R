@@ -1242,9 +1242,50 @@ write_xlsx(list(
   "Correl_p"   = as.data.frame(round(cc_obj$p,4)) %>% rownames_to_column("constructe")
 ), "sortides/resultats_comparacions_extra.xlsx")
 
+# ===========================================================================
+#  PART L · CORRELACIÓ ENTRE LES 3 DIMENSIONS PRINCIPALS (P3)
+#  Spearman entre Funcionament de la xarxa, Alineació de propòsits i Sensació
+#  d'energia, amb IC 95% per bootstrap. Explora la relació coherència<->energia.
+#  Es fa en teòric i, en l'empíric, es mira quina FACETA de coherència (factors
+#  del Bloc 1) es lliga més a l'energia.
+# ===========================================================================
+set.seed(2024)
+sp_ci <- function(a, b, B = 2000) {
+  d <- na.omit(data.frame(x = a, y = b)); n <- nrow(d)
+  rho <- cor(d$x, d$y, method = "spearman")
+  pe  <- suppressWarnings(cor.test(d$x, d$y, method = "spearman"))$p.value
+  bs  <- replicate(B, { idx <- sample(n, replace = TRUE)
+                        suppressWarnings(cor(d$x[idx], d$y[idx], method = "spearman")) })
+  ci  <- quantile(bs, c(.025, .975), na.rm = TRUE)
+  tibble(rho = round(rho,3), ic_low = round(unname(ci[1]),3),
+         ic_high = round(unname(ci[2]),3), p = round(pe,4), n = n)
+}
+
+# 3 dimensions principals (teòric)
+parelles <- list(
+  c("Funcionament","Energia",   "idx_funcionament_xarxa","idx_energia"),
+  c("Propòsit","Energia",       "idx_alineament_proposit","idx_energia"),
+  c("Funcionament","Propòsit",  "idx_funcionament_xarxa","idx_alineament_proposit"))
+cor3_teoric <- map_dfr(parelles, function(p)
+  bind_cols(tibble(dim_A = p[1], dim_B = p[2]),
+            sp_ci(dades[[p[3]]], dades[[p[4]]])))
+cat("\n===== P3 · CORRELACIÓ ENTRE LES 3 DIMENSIONS (teòric, Spearman + IC95%) =====\n")
+print(as.data.frame(cor3_teoric), row.names = FALSE)
+
+# Empíric: quina faceta de coherència (factors del Bloc 1) es lliga a l'energia
+corE_facetes <- map_dfr(constructes_emp, function(f)
+  bind_cols(tibble(faceta = f, vs = "Energia"),
+            sp_ci(dades[[f]], dades$idx_energia)))
+cat("\n===== P3 · ENERGIA vs facetes empíriques de coherència (Bloc 1) =====\n")
+print(as.data.frame(corE_facetes), row.names = FALSE)
+
+write_xlsx(list("P3_3dimensions" = cor3_teoric, "P3_energia_facetes" = corE_facetes),
+           "sortides/resultats_correlacio_P3.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
+    " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
     " - resultats_control_empiric.xlsx (ítems 23-24-25 vs constructes EMPÍRICS)\n",
     " - resultats_afe.xlsx (AFE del Bloc 1)\n",
