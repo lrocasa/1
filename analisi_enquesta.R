@@ -590,7 +590,118 @@ fulls_export <- c(list("Tests_constructes" = taula_tests,
                     substr(paste0("PH_", names(posthoc_list)), 1, 31)))
 write_xlsx(fulls_export, "sortides/resultats_segmentadors.xlsx")
 
+# ===========================================================================
+#  PART C · ÍTEMS DE CONTROL (23, 24, 25)
+#  ítems 23 i 25 = trajectòria energètica (ordinal -2..+2 + flag 'Fluctuant')
+#  ítem 24       = antiguitat al rol (ordinal 1..5)
+#  Rol: validesa bivariada (Spearman) + covariables de control en models.
+# ===========================================================================
+
+# ---- C1. Recodificació (robusta a accents/guions, via grepl) ---------------
+dir_code <- function(x) dplyr::case_when(
+  grepl("Clarament decreixent",   x) ~ -2,
+  grepl("Lleugerament decreixent",x) ~ -1,
+  grepl("Estable",                x) ~  0,
+  grepl("Lleugerament creixent",  x) ~  1,
+  grepl("Clarament creixent",     x) ~  2,
+  TRUE ~ NA_real_)                       # 'Fluctuant' queda NA en la direcció
+
+dades <- dades %>%
+  mutate(
+    q23_dir   = dir_code(as.character(q23_tendencia_curs)),
+    q23_fluct = as.integer(grepl("Fluctuant", as.character(q23_tendencia_curs))),
+    q25_dir   = dir_code(as.character(q25_tendencia_rol)),
+    q25_fluct = as.integer(grepl("Fluctuant", as.character(q25_tendencia_rol))),
+    q24_anys_ord = dplyr::case_when(
+      grepl("Menys",    as.character(q24_anys_rol)) ~ 1,
+      grepl("^1",       as.character(q24_anys_rol)) ~ 2,   # 1-3 anys
+      grepl("^4",       as.character(q24_anys_rol)) ~ 3,   # 4-6 anys
+      grepl("^7",       as.character(q24_anys_rol)) ~ 4,   # 7-10 anys
+      grepl("Més de 10",as.character(q24_anys_rol)) ~ 5,
+      TRUE ~ NA_real_),
+    # versió de la direcció amb Fluctuant=0 (per als models; el flag l'absorbeix)
+    q23_dir0 = ifelse(q23_fluct == 1, 0, q23_dir),
+    q25_dir0 = ifelse(q25_fluct == 1, 0, q25_dir)
+  )
+
+# ---- C2. Validesa bivariada: Spearman controls <-> constructes -------------
+controls_ord <- c("q23_dir","q25_dir","q24_anys_ord")
+cor_controls <- map_dfr(controls_ord, function(v) {
+  map_dfr(constructes_clau, function(cc) {
+    d <- dades %>% select(x = all_of(v), y = all_of(cc)) %>% drop_na()
+    ct <- suppressWarnings(cor.test(d$x, d$y, method = "spearman"))
+    tibble(control = v, construct = cc, n = nrow(d),
+           rho = unname(ct$estimate), p = ct$p.value)
+  })
+}) %>% mutate(p_adj = p.adjust(p, method = "BH"),
+             across(c(rho, p, p_adj), ~ round(.x, 4)))
+cat("\n===== CONTROLS (23,25 direcció; 24 anys) x CONSTRUCTES: Spearman =====\n")
+print(as.data.frame(cor_controls), row.names = FALSE)
+
+# Flags 'Fluctuant' (binaris) vs constructes: diferència de mitjanes
+fluct_efecte <- map_dfr(c("q23_fluct","q25_fluct"), function(v) {
+  map_dfr(constructes_clau, function(cc) {
+    d <- dades %>% select(g = all_of(v), y = all_of(cc)) %>% drop_na()
+    tt <- t.test(y ~ g, data = d)
+    tibble(flag = v, construct = cc,
+           dif_No_menys_Si = round(diff(rev(tt$estimate)), 2),
+           p = round(tt$p.value, 4))
+  })
+})
+cat("\n===== Efecte de 'Fluctuant' (Sí vs No) sobre els constructes =====\n")
+print(as.data.frame(fluct_efecte), row.names = FALSE)
+
+# ---- C3. Models de control: jerarquia M0 (controls) -> M1 (+ segmentador) --
+# Pregunta: el segmentador aporta variància MÉS ENLLÀ dels controls?
+controls_form <- "q23_dir0 + q23_fluct + q25_dir0 + q25_fluct + q24_anys_ord"
+
+model_control <- function(construct, seg) {
+  d <- dades %>%
+    transmute(y = .data[[construct]], grp = droplevels(factor(.data[[seg]])),
+              q23_dir0, q23_fluct, q25_dir0, q25_fluct, q24_anys_ord) %>%
+    group_by(grp) %>% filter(n() >= 3) %>% ungroup() %>%
+    mutate(grp = droplevels(grp)) %>% drop_na()
+  if (nrow(d) < 20 || nlevels(d$grp) < 2) return(NULL)
+  M0 <- lm(as.formula(paste("y ~", controls_form)), data = d)
+  M1 <- update(M0, . ~ . + grp)
+  an <- anova(M0, M1)
+  tibble(construct = construct, segmentador = seg, n = nrow(d),
+         R2_controls = round(summary(M0)$r.squared, 3),
+         R2_total    = round(summary(M1)$r.squared, 3),
+         dR2_segment = round(summary(M1)$r.squared - summary(M0)$r.squared, 3),
+         F_segment   = round(an$F[2], 2),
+         p_segment   = round(an$`Pr(>F)`[2], 4))
+}
+models_control <- map_dfr(constructes_clau, function(cc)
+  map_dfr(segmentadors, ~ model_control(cc, .x))) %>%
+  group_by(construct) %>% mutate(p_seg_adj = round(p.adjust(p_segment, "holm"), 4)) %>%
+  ungroup()
+cat("\n===== MODELS DE CONTROL: aportació del segmentador sobre els controls =====\n")
+print(as.data.frame(models_control), row.names = FALSE)
+
+# Coeficients del model NOMÉS amb controls, per a cada constructe (quins controls pesen)
+coef_controls <- map_dfr(constructes_clau, function(cc) {
+  d <- dades %>% transmute(y = .data[[cc]], q23_dir0, q23_fluct,
+                           q25_dir0, q25_fluct, q24_anys_ord) %>% drop_na()
+  m <- lm(as.formula(paste("y ~", controls_form)), data = d)
+  broom_like <- as.data.frame(summary(m)$coefficients)
+  tibble(construct = cc, terme = rownames(broom_like),
+         beta = round(broom_like[,1], 3), p = round(broom_like[,4], 4),
+         R2 = round(summary(m)$r.squared, 3))
+})
+cat("\n===== Coeficients dels models només-controls =====\n")
+print(as.data.frame(coef_controls), row.names = FALSE)
+
+# ---- C4. Exportar -----------------------------------------------
+write_xlsx(list(
+  "Spearman_controls" = cor_controls,
+  "Fluctuant_efecte"  = fluct_efecte,
+  "Models_control"    = models_control,
+  "Coef_controls"     = coef_controls
+), "sortides/resultats_control.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
+    " - resultats_control.xlsx (ítems 23-24-25: validesa i models)\n",
     " - gràfics .png\n")
