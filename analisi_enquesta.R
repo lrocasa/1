@@ -772,9 +772,74 @@ write_xlsx(c(list("Resum_solucions" = afe_resum),
              setNames(afe_loadings, paste0("Carregues_", names(afe_loadings)))),
            "sortides/resultats_afe.xlsx")
 
+# ===========================================================================
+#  PART E · DIMENSIONS EMPÍRIQUES (segons l'AFE de 3 factors del Bloc 1)
+#  Es deriven AUTOMÀTICAMENT de la solució de 3 factors i es repeteix tota
+#  l'anàlisi (fiabilitat + segmentadors + controls) EN PARAL·LEL a la teòrica
+#  (les dimensions teòriques es mantenen intactes).
+#  EF1/EF2/EF3 = factors empírics (MR de l'AFE). Mira 'assig_emp' per veure
+#  quins ítems conté cada factor i posar-hi una etiqueta de contingut.
+# ===========================================================================
+fa3 <- afe_models[["F3"]]
+L3  <- unclass(fa3$loadings)
+CARREGA_MIN <- 0.30
+
+# Assignació de cada ítem al factor on carrega més
+assig_emp <- tibble(
+  item    = rownames(L3),
+  factor  = paste0("EF", apply(abs(L3), 1, which.max)),
+  carrega = round(apply(L3, 1, function(r) r[which.max(abs(r))]), 3)) %>%
+  mutate(assignat = abs(carrega) >= CARREGA_MIN,
+         dimensio_teorica = teoria_dim[item])
+cat("\n===== DIMENSIONS EMPÍRIQUES (AFE 3 factors) =====\n")
+print(as.data.frame(assig_emp), row.names = FALSE)
+
+# Ítems per factor (només assignats) i construcció dels índexs empírics
+emp_items <- assig_emp %>% filter(assignat) %>% { split(.$item, .$factor) }
+for (f in names(emp_items)) {
+  its <- emp_items[[f]]
+  mat <- do.call(cbind, lapply(its, function(it) {
+    crg <- assig_emp$carrega[assig_emp$item == it]
+    x <- dades[[it]]; if (crg < 0) 8 - x else x       # reverteix si càrrega < 0
+  }))
+  dades[[paste0("idx_", f)]] <- rowMeans(mat, na.rm = TRUE)
+}
+constructes_emp <- paste0("idx_", names(emp_items))
+
+# ---- E1. Fiabilitat (omega) dels factors empírics -------------------------
+taula_fiab_emp <- map_dfr(names(emp_items),
+  ~ fiab_omega(dades, emp_items[[.x]], paste0("Empíric ", .x))) %>%
+  mutate(valoracio = interpreta(omega))
+cat("\n--- Fiabilitat (omega) dels factors empírics ---\n")
+print(as.data.frame(taula_fiab_emp), row.names = FALSE)
+
+# ---- E2. Segmentadors sobre els factors empírics --------------------------
+taula_tests_emp <- map_dfr(segmentadors,
+  ~ compara_segment(dades, .x, constructes = constructes_emp)) %>%
+  mutate(across(c(p,p_noparam,p_adj,efecte,ef_ic_low,ef_ic_high), ~round(.x,4)))
+cat("\n--- Tests per segmentador (factors empírics) ---\n")
+print(as.data.frame(taula_tests_emp), row.names = FALSE)
+
+# ---- E3. Models de control sobre els factors empírics ---------------------
+models_control_emp <- map_dfr(constructes_emp, function(cc)
+  map_dfr(segmentadors, ~ model_control(cc, .x))) %>%
+  group_by(construct) %>% mutate(p_seg_adj = round(p.adjust(p_segment,"holm"),4)) %>%
+  ungroup()
+cat("\n--- Models de control (factors empírics) ---\n")
+print(as.data.frame(models_control_emp), row.names = FALSE)
+
+# ---- E4. Exportar ---------------------------------------------------------
+write_xlsx(list(
+  "Assignacio_items"  = assig_emp,
+  "Fiabilitat_omega"  = taula_fiab_emp,
+  "Tests_segmentador" = taula_tests_emp,
+  "Models_control"    = models_control_emp
+), "sortides/resultats_empiriques.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
-    " - resultats_analisi.xlsx (descriptius i fiabilitat)\n",
+    " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_control.xlsx (ítems 23-24-25: validesa i models)\n",
     " - resultats_afe.xlsx (anàlisi factorial exploratòria del Bloc 1)\n",
+    " - resultats_empiriques.xlsx (dimensions empíriques: fiab. + segm. + control)\n",
     " - gràfics .png (inclòs afe_scree.png)\n")
