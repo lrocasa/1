@@ -1041,8 +1041,10 @@ write_xlsx(list("Prevalenca_rols" = prevalenca_rols, "Tests_rols" = tests_rols),
 #  ATENCIÓ: és observacional -> no permet inferir causalitat (pot haver-hi
 #  autoselecció: qui ja està millor/pitjor s'apunta més als projectes).
 # ===========================================================================
+# GdE (Grup d'Experts) compta TAMBÉ com a projecte estratègic (a més de rol).
 dades <- dades %>% mutate(
-  n_projectes_FECC = (EeX == 1) + (EeXAMC == 1) + (EdD == 1),
+  GdE_proj = rolind_GdE,                                   # factor No/Sí (creat a PART G)
+  n_projectes_FECC = (EeX == 1) + (EeXAMC == 1) + (EdD == 1) + (rolind_GdE == "Sí"),
   particip_FECC = factor(as.integer(n_projectes_FECC >= 1),
                          levels = c(0,1), labels = c("No","Sí")))
 
@@ -1063,7 +1065,7 @@ prova_hipotesi <- function(df, var, constructes) {
            p = round(tt$p.value, 4))
   })
 }
-vars_fecc  <- c("EeX_f","EeXAMC_f","EdD_f","particip_FECC")
+vars_fecc  <- c("EeX_f","EeXAMC_f","EdD_f","GdE_proj","particip_FECC")
 constr_tot <- c(constructes_clau, constructes_emp, constructes_b23)
 tests_hipotesi <- map_dfr(vars_fecc, ~ prova_hipotesi(dades, .x, constr_tot)) %>%
   group_by(variable) %>% mutate(p_adj = round(p.adjust(p,"holm"),4)) %>% ungroup()
@@ -1181,6 +1183,51 @@ write_xlsx(c(list("KW_nivell_territori" = tests_kw,
                substr(paste0("Dunn_", names(dunn_list)),1,31))),
            "sortides/resultats_subgrups_noparam.xlsx")
 
+# ===========================================================================
+#  PART J · ETAPES (cursos) i ÀMBITS + CORRELACIONS ENTRE CONSTRUCTES
+#  - Etapes/àmbits: indicadors 0/1; només té sentit en DOCENTS. Mann-Whitney
+#    "imparteix en aquesta etapa/àmbit vs no" entre els docents.
+#  - Correlacions de Spearman entre els constructes (teòrics + empírics).
+# ===========================================================================
+docents_df <- dades %>% filter(DocenciaDirecta == "Sí")
+
+mw_binari <- function(df, vars, constructes, min_cell = 5) {
+  map_dfr(vars, function(v) {
+    map_dfr(constructes, function(cc) {
+      d <- df %>% transmute(g = factor(ifelse(.data[[v]] == 1, "Sí", "No"),
+                                       levels = c("No","Sí")),
+                            y = .data[[cc]]) %>% drop_na() %>% mutate(g = droplevels(g))
+      if (nlevels(d$g) < 2 || any(table(d$g) < min_cell)) return(NULL)
+      wt <- suppressWarnings(wilcox.test(y ~ g, data = d))
+      r  <- tryCatch(rstatix::wilcox_effsize(d, y ~ g)$effsize, error = function(e) NA_real_)
+      m  <- tapply(d$y, d$g, median)
+      tibble(variable = v, construct = cc,
+             md_No = round(m["No"],2), md_Si = round(m["Sí"],2),
+             p = round(wt$p.value,4), r_efecte = round(r,3))
+    })
+  }) %>% group_by(variable) %>% mutate(p_adj = round(p.adjust(p,"holm"),4)) %>% ungroup()
+}
+tests_etapes <- mw_binari(docents_df, vars_etapes, constr_tot)
+tests_ambits <- mw_binari(docents_df, vars_ambits, constr_tot)
+cat("\n===== ETAPES (cursos) · Mann-Whitney (només docents) =====\n")
+print(as.data.frame(tests_etapes), row.names = FALSE)
+cat("\n===== ÀMBITS · Mann-Whitney (només docents) =====\n")
+print(as.data.frame(tests_ambits), row.names = FALSE)
+
+# Correlacions de Spearman ENTRE constructes (teòrics + empírics del Bloc 1)
+constr_corr <- c(constructes_clau, constructes_emp)
+cc_obj <- psych::corr.test(dades[, constr_corr], method = "spearman", adjust = "holm")
+cat("\n===== CORRELACIONS ENTRE CONSTRUCTES (Spearman, r) =====\n")
+print(round(cc_obj$r, 2))
+cat("\n(p ajustada Holm a sota de la diagonal de cc_obj$p)\n")
+
+write_xlsx(list(
+  "Etapes_MW"  = tests_etapes,
+  "Ambits_MW"  = tests_ambits,
+  "Correl_r"   = as.data.frame(round(cc_obj$r,3)) %>% rownames_to_column("constructe"),
+  "Correl_p"   = as.data.frame(round(cc_obj$p,4)) %>% rownames_to_column("constructe")
+), "sortides/resultats_comparacions_extra.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
@@ -1190,6 +1237,7 @@ cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_afe_bloc23.xlsx (AFE conjunta Bloc 2 + Bloc 3)\n",
     " - resultats_empiriques.xlsx (dimensions empíriques: fiab. + segm. + control)\n",
     " - resultats_rols_multiples.xlsx (rols múltiples Cargo+Subcargo)\n",
-    " - resultats_hipotesi_FECC.xlsx (hipòtesi participació en projectes FECC)\n",
+    " - resultats_hipotesi_FECC.xlsx (hipòtesi projectes FECC, inclòs GdE)\n",
     " - resultats_subgrups_noparam.xlsx (Mann-Whitney/Kruskal-Wallis: rol, nivell, territori)\n",
+    " - resultats_comparacions_extra.xlsx (etapes, àmbits i correlacions entre constructes)\n",
     " - gràfics .png (inclòs afe_scree.png)\n")
