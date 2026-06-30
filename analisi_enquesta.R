@@ -960,7 +960,7 @@ map_rol <- function(x) {
     grepl("Director|Subdirector|Cap [Ee]studis|Coordinador Infantil|Coordinador CF", x) ~ "Equip directiu",
     grepl("Comité d'ètica", x)       ~ "Comité d'ètica",
     x %in% c("APSEC","CCAPAC","APPEC") ~ "Entitat FECC",
-    grepl("FECC|Tècnic|Responsable|Col·laborador", x) ~ "Personal FECC",  # inclou Tècnic, Responsable, Col·laboradora
+    grepl("FECC|Tècnic|Responsable", x) ~ "Personal FECC",  # inclou Tècnic i Responsable (NO Col·laboradora: s'elimina)
     grepl("Professor|Mestre|Pastoral|TIC|Orientador|COCOBE", x) ~ "Professorat",
     x == "PAS"                       ~ "PAS",
     TRUE                             ~ NA_character_)
@@ -1001,6 +1001,56 @@ print(as.data.frame(tests_rols), row.names = FALSE)
 write_xlsx(list("Prevalenca_rols" = prevalenca_rols, "Tests_rols" = tests_rols),
            "sortides/resultats_rols_multiples.xlsx")
 
+# ===========================================================================
+#  PART H · HIPÒTESI: participació en projectes estratègics FECC
+#  EeX, EeXAMC, EdD = participació en projectes (formacions, assessoraments...).
+#  H1: els participants haurien de mostrar MÉS coherència, energia i propòsit.
+#  Es comprova amb DIRECCIÓ de l'efecte (Sí - No) sobre tots els constructes.
+#  ATENCIÓ: és observacional -> no permet inferir causalitat (pot haver-hi
+#  autoselecció: qui ja està millor/pitjor s'apunta més als projectes).
+# ===========================================================================
+dades <- dades %>% mutate(
+  n_projectes_FECC = (EeX == 1) + (EeXAMC == 1) + (EdD == 1),
+  particip_FECC = factor(as.integer(n_projectes_FECC >= 1),
+                         levels = c(0,1), labels = c("No","Sí")))
+
+# Test direccional Sí vs No (d amb signe: + = participants MÉS alts)
+prova_hipotesi <- function(df, var, constructes) {
+  map_dfr(constructes, function(cc) {
+    d <- df %>% transmute(g = droplevels(factor(.data[[var]])),
+                          y = .data[[cc]]) %>% drop_na()
+    if (nlevels(d$g) < 2 || any(table(d$g) < 3)) return(NULL)
+    m  <- tapply(d$y, d$g, mean)
+    nN <- sum(d$g=="No"); nS <- sum(d$g=="Sí")
+    sp <- sqrt(((nN-1)*var(d$y[d$g=="No"]) + (nS-1)*var(d$y[d$g=="Sí"]))/(nN+nS-2))
+    tt <- t.test(y ~ g, data = d)
+    tibble(variable = var, construct = cc, n_Si = nS,
+           mitj_No = round(m["No"],2), mitj_Si = round(m["Sí"],2),
+           dif = round(m["Sí"]-m["No"],2),
+           d_signe = round((m["Sí"]-m["No"])/sp, 3),
+           p = round(tt$p.value, 4))
+  })
+}
+vars_fecc  <- c("EeX_f","EeXAMC_f","EdD_f","particip_FECC")
+constr_tot <- c(constructes_clau, constructes_emp, constructes_b23)
+tests_hipotesi <- map_dfr(vars_fecc, ~ prova_hipotesi(dades, .x, constr_tot)) %>%
+  group_by(variable) %>% mutate(p_adj = round(p.adjust(p,"holm"),4)) %>% ungroup()
+cat("\n===== HIPÒTESI projectes FECC: participant (Sí) vs no =====\n")
+cat("d_signe > 0 -> participants MÉS alts (a favor de la hipòtesi)\n")
+print(as.data.frame(tests_hipotesi), row.names = FALSE)
+
+# Dosi-resposta: nombre de projectes vs constructes (Spearman)
+dosi_fecc <- map_dfr(constr_tot, function(cc) {
+  d <- dades %>% transmute(x = n_projectes_FECC, y = .data[[cc]]) %>% drop_na()
+  ct <- suppressWarnings(cor.test(d$x, d$y, method = "spearman"))
+  tibble(construct = cc, rho = round(unname(ct$estimate),3), p = round(ct$p.value,4))
+})
+cat("\n--- Dosi-resposta (nombre de projectes FECC, Spearman) ---\n")
+print(as.data.frame(dosi_fecc), row.names = FALSE)
+
+write_xlsx(list("Hipotesi_FECC" = tests_hipotesi, "Dosi_resposta" = dosi_fecc),
+           "sortides/resultats_hipotesi_FECC.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
@@ -1009,4 +1059,5 @@ cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_afe_bloc23.xlsx (AFE conjunta Bloc 2 + Bloc 3)\n",
     " - resultats_empiriques.xlsx (dimensions empíriques: fiab. + segm. + control)\n",
     " - resultats_rols_multiples.xlsx (rols múltiples Cargo+Subcargo)\n",
+    " - resultats_hipotesi_FECC.xlsx (hipòtesi participació en projectes FECC)\n",
     " - gràfics .png (inclòs afe_scree.png)\n")
