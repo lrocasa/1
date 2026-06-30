@@ -944,6 +944,33 @@ write_xlsx(c(setNames(afe23_loadings, paste0("Carregues_", names(afe23_loadings)
                   "Models_control"    = models_control_b23)),
            "sortides/resultats_afe_bloc23.xlsx")
 
+# ---- PART C (versió EMPÍRICA): controls 23-24-25 vs constructes empírics ---
+# Completa l'estudi perquè la validesa dels controls també es faci sobre els
+# factors empírics (Bloc 1 + Bloc 2+3), no només sobre els teòrics (PART C).
+constr_emp_all <- c(constructes_emp, constructes_b23)
+cor_controls_emp <- map_dfr(controls_ord, function(v) {
+  map_dfr(constr_emp_all, function(cc) {
+    d <- dades %>% select(x = all_of(v), y = all_of(cc)) %>% drop_na()
+    ct <- suppressWarnings(cor.test(d$x, d$y, method = "spearman"))
+    tibble(control = v, construct = cc, n = nrow(d),
+           rho = unname(ct$estimate), p = ct$p.value)
+  })
+}) %>% mutate(p_adj = p.adjust(p, "BH"), across(c(rho,p,p_adj), ~round(.x,4)))
+cat("\n--- Controls 23-24-25 vs constructes EMPÍRICS (Spearman) ---\n")
+print(as.data.frame(cor_controls_emp), row.names = FALSE)
+
+coef_controls_emp <- map_dfr(constr_emp_all, function(cc) {
+  d <- dades %>% transmute(y = .data[[cc]], q23_dir0, q23_fluct,
+                           q25_dir0, q25_fluct, q24_anys_ord) %>% drop_na()
+  m <- lm(as.formula(paste("y ~", controls_form)), data = d)
+  bl <- as.data.frame(summary(m)$coefficients)
+  tibble(construct = cc, terme = rownames(bl), beta = round(bl[,1],3),
+         p = round(bl[,4],4), R2 = round(summary(m)$r.squared,3))
+})
+write_xlsx(list("Spearman_controls_emp" = cor_controls_emp,
+                "Coef_controls_emp"     = coef_controls_emp),
+           "sortides/resultats_control_empiric.xlsx")
+
 # ===========================================================================
 #  PART G · ROLS MÚLTIPLES (Cargo + Subcargo) com a indicadors 0/1
 #  Una persona pot tenir diversos càrrecs. Es combinen Cargo + Subcargos
@@ -1054,7 +1081,8 @@ write_xlsx(list("Hipotesi_FECC" = tests_hipotesi, "Dosi_resposta" = dosi_fecc),
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
-    " - resultats_control.xlsx (ítems 23-24-25: validesa i models)\n",
+    " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
+    " - resultats_control_empiric.xlsx (ítems 23-24-25 vs constructes EMPÍRICS)\n",
     " - resultats_afe.xlsx (AFE del Bloc 1)\n",
     " - resultats_afe_bloc23.xlsx (AFE conjunta Bloc 2 + Bloc 3)\n",
     " - resultats_empiriques.xlsx (dimensions empíriques: fiab. + segm. + control)\n",
