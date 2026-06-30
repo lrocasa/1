@@ -184,6 +184,63 @@ alpha_segur(dades, c("prop28","prop29","prop31"),  "BLOC 3 Alineament propòsit"
 cat("\n--- Fiabilitat per dimensió (Bloc 1) ---\n")
 for (nom in names(dimensions)) alpha_segur(dades, dimensions[[nom]], nom)
 
+# ---- 8b. Consistència interna: coeficient OMEGA de McDonald ---------------
+# L'omega és preferible a l'alfa de Cronbach, especialment en escales reduïdes,
+# perquè no assumeix tau-equivalència (que tots els ítems pesin igual sobre el
+# factor). És condició necessària per interpretar els blocs amb garanties.
+#
+# Regla de càlcul segons el nombre d'ítems:
+#   >= 3 ítems  -> omega total de McDonald  (psych::omega, model d'1 factor)
+#    = 2 ítems  -> coeficient de Spearman-Brown (l'omega no és identificable)
+#    = 1 ítem   -> no aplica (ítem únic)
+# Interpretació orientativa: >=.70 acceptable, >=.80 bona, >=.90 excel·lent.
+
+fiab_omega <- function(df, items, etiqueta) {
+  k <- length(items)
+  x <- df[, items, drop = FALSE]
+  n <- sum(stats::complete.cases(x))
+  a <- if (k >= 2) suppressWarnings(psych::alpha(x, warnings = FALSE)$total$raw_alpha)
+       else NA_real_
+  if (k < 2) {
+    om <- NA_real_; met <- "1 ítem (no aplica)"
+  } else if (k == 2) {
+    r  <- cor(x[[1]], x[[2]], use = "pairwise.complete.obs")
+    om <- 2 * r / (1 + r)                       # Spearman-Brown
+    met <- "Spearman-Brown (2 ítems)"
+  } else {
+    om <- tryCatch(
+      suppressWarnings(suppressMessages(
+        psych::omega(x, nfactors = 1, plot = FALSE, flip = FALSE)$omega.tot)),
+      error = function(e) NA_real_)
+    met <- "omega total (McDonald)"
+  }
+  tibble(escala = etiqueta, n_items = k, n = n,
+         alpha = round(a, 3), omega = round(om, 3), metode = met)
+}
+
+interpreta <- function(o) cut(o, c(-Inf, .60, .70, .80, .90, Inf),
+  labels = c("insuficient","qüestionable","acceptable","bona","excel·lent"))
+
+# Escales principals (blocs de l'instrument)
+escales_blocs <- list(
+  "BLOC 1 · Funcionament de la xarxa" = bloc1_corregits,
+  "BLOC 2 · Sensació d'energia"       = c("en18","en19_r","en20"),
+  "BLOC 2 · Recuperació energètica"   = c("en26","en27_r"),
+  "BLOC 3 · Alineament propòsit"      = c("prop28","prop29","prop31")
+)
+taula_fiab <- map_dfr(names(escales_blocs),
+                      ~ fiab_omega(dades, escales_blocs[[.x]], .x)) %>%
+  mutate(valoracio = interpreta(omega))
+cat("\n===== CONSISTÈNCIA INTERNA (omega de McDonald) — BLOCS =====\n")
+print(as.data.frame(taula_fiab), row.names = FALSE)
+
+# Mateix càlcul per a les dimensions del Bloc 1
+taula_fiab_dim <- map_dfr(names(dimensions),
+                          ~ fiab_omega(dades, dimensions[[.x]], .x)) %>%
+  mutate(valoracio = interpreta(omega))
+cat("\n===== CONSISTÈNCIA INTERNA — DIMENSIONS DEL BLOC 1 =====\n")
+print(as.data.frame(taula_fiab_dim), row.names = FALSE)
+
 # ---- 9. Descriptius dels ítems de Bloc 1 ----------------------------------
 desc_bloc1 <- dades %>%
   select(all_of(items_bloc1)) %>%
@@ -296,6 +353,8 @@ ggsave("sortides/factors_estres.png", g3, width = 8, height = 6, dpi = 150)
 # ---- 14. Exportar resultats -----------------------------------------------
 write_xlsx(
   list(
+    "Fiabilitat_omega_blocs"  = taula_fiab,
+    "Fiabilitat_omega_dims"   = taula_fiab_dim,
     "Descriptius_items_bloc1" = desc_bloc1,
     "Descriptius_energia_prop"= desc_energia,
     "Descriptius_constructes" = desc_indexs,
