@@ -793,6 +793,10 @@ assig_emp <- tibble(
          dimensio_teorica = teoria_dim[item])
 cat("\n===== DIMENSIONS EMPÍRIQUES (AFE 3 factors) =====\n")
 print(as.data.frame(assig_emp), row.names = FALSE)
+exclosos_e <- assig_emp$item[!assig_emp$assignat]
+cat("Ítems exclosos dels índexs empírics (càrrega <", CARREGA_MIN, "):",
+    if (length(exclosos_e)) paste(exclosos_e, collapse = ", ") else "cap",
+    "  (segueixen als constructes TEÒRICS)\n")
 
 # Ítems per factor (només assignats) i construcció dels índexs empírics
 emp_items <- assig_emp %>% filter(assignat) %>% { split(.$item, .$factor) }
@@ -893,6 +897,10 @@ assig_b23 <- tibble(
          dimensio_teorica = teoria_f[item])
 cat("\n===== FACTORS EMPÍRICS Bloc 2+3 (2 factors) =====\n")
 print(as.data.frame(assig_b23), row.names = FALSE)
+exclosos_f <- assig_b23$item[!assig_b23$assignat]
+cat("Ítems exclosos dels índexs empírics (càrrega <", CARREGA_MIN, "):",
+    if (length(exclosos_f)) paste(exclosos_f, collapse = ", ") else "cap",
+    "  (segueixen als constructes TEÒRICS)\n")
 
 # Per construir els índexs reaprofitem columnes de 'dades' (reversions ja fetes).
 col_de <- function(it) dplyr::case_when(
