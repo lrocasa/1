@@ -944,6 +944,63 @@ write_xlsx(c(setNames(afe23_loadings, paste0("Carregues_", names(afe23_loadings)
                   "Models_control"    = models_control_b23)),
            "sortides/resultats_afe_bloc23.xlsx")
 
+# ===========================================================================
+#  PART G · ROLS MÚLTIPLES (Cargo + Subcargo) com a indicadors 0/1
+#  Una persona pot tenir diversos càrrecs. Es combinen Cargo + Subcargos
+#  (separats per '/') en indicadors binaris per grup de rol (multi-pertinença,
+#  com etapes/àmbits). Per a cada rol es compara qui el té vs qui no, sobre
+#  els constructes. Una fila per persona (n=143): independència preservada.
+# ===========================================================================
+map_rol <- function(x) {
+  x <- trimws(x)
+  dplyr::case_when(
+    grepl("GdE", x)                  ~ "GdE",
+    grepl("Responsable de xarxa", x) ~ "Responsables de xarxa",
+    x == "Titular"                   ~ "Titularitat",
+    grepl("Director|Subdirector|Cap [Ee]studis|Coordinador Infantil|Coordinador CF", x) ~ "Equip directiu",
+    grepl("Comité d'ètica", x)       ~ "Comité d'ètica",
+    x %in% c("APSEC","CCAPAC","APPEC") ~ "Entitat FECC",
+    grepl("FECC|Tècnic|Responsable|Col·laborador", x) ~ "Personal FECC",  # inclou Tècnic, Responsable, Col·laboradora
+    grepl("Professor|Mestre|Pastoral|TIC|Orientador|COCOBE", x) ~ "Professorat",
+    x == "PAS"                       ~ "PAS",
+    TRUE                             ~ NA_character_)
+}
+
+# Conjunt de rols per persona (Cargo + Subcargo separat per '/')
+rols_persona <- lapply(seq_len(nrow(dades)), function(i) {
+  toks <- c(as.character(dades$Cargo[i]),
+            unlist(strsplit(as.character(dades$Subcargo[i]), "/", fixed = TRUE)))
+  toks <- trimws(toks); toks <- toks[!toks %in% c("", "0", "NA", "nan")]
+  unique(stats::na.omit(map_rol(toks)))
+})
+grups_rol <- sort(unique(stats::na.omit(unlist(rols_persona))))
+
+# Indicadors 0/1 (factor No/Sí) per a cada grup de rol
+for (gr in grups_rol) {
+  ind <- vapply(rols_persona, function(r) as.integer(gr %in% r), integer(1))
+  dades[[paste0("rolind_", gr)]] <- factor(ind, levels = c(0,1), labels = c("No","Sí"))
+}
+
+# Prevalença (multi-pertinença) vs Cargo principal sol
+prevalenca_rols <- tibble(
+  rol = grups_rol,
+  n_multi = sapply(grups_rol, function(gr) sum(vapply(rols_persona, function(r) gr %in% r, logical(1))))
+) %>% arrange(desc(n_multi))
+cat("\n===== PREVALENÇA DE ROLS (multi-pertinença: Cargo + Subcargo) =====\n")
+print(as.data.frame(prevalenca_rols), row.names = FALSE)
+
+# Tests "té el rol vs no", per a cada rol amb >=5 membres, sobre TOTS els
+# constructes (teòrics + empírics del Bloc 1 + empírics del Bloc 2+3).
+rol_segs   <- paste0("rolind_", prevalenca_rols$rol[prevalenca_rols$n_multi >= 5])
+constr_tot <- c(constructes_clau, constructes_emp, constructes_b23)
+tests_rols <- map_dfr(rol_segs, ~ compara_segment(dades, .x, constructes = constr_tot)) %>%
+  mutate(across(c(p,p_noparam,p_adj,efecte,ef_ic_low,ef_ic_high), ~ round(.x,4)))
+cat("\n===== TESTS: TÉ EL ROL vs NO, per constructe (Cohen d, IC, p Holm) =====\n")
+print(as.data.frame(tests_rols), row.names = FALSE)
+
+write_xlsx(list("Prevalenca_rols" = prevalenca_rols, "Tests_rols" = tests_rols),
+           "sortides/resultats_rols_multiples.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
@@ -951,4 +1008,5 @@ cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_afe.xlsx (AFE del Bloc 1)\n",
     " - resultats_afe_bloc23.xlsx (AFE conjunta Bloc 2 + Bloc 3)\n",
     " - resultats_empiriques.xlsx (dimensions empíriques: fiab. + segm. + control)\n",
+    " - resultats_rols_multiples.xlsx (rols múltiples Cargo+Subcargo)\n",
     " - gràfics .png (inclòs afe_scree.png)\n")
