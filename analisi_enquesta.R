@@ -725,9 +725,14 @@ cat(sprintf("KMO global = %.3f | Bartlett: chi2=%.0f, p=%.2g\n",
 
 # ---- D2. Nombre de factors: anàlisi paral·lela (referència) ---------------
 set.seed(2024)
-pa <- psych::fa.parallel(dades_afe, fm = "minres", fa = "fa", cor = "poly",
-                         plot = FALSE, n.iter = 100)
-cat("Factors suggerits per anàlisi paral·lela:", pa$nfact, "\n")
+# fa.parallel policòric pot fallar en algunes versions de psych -> fallback Pearson
+pa <- tryCatch(psych::fa.parallel(dades_afe, fm = "minres", fa = "fa", cor = "poly",
+                                  plot = FALSE, n.iter = 100), error = function(e) NULL)
+if (is.null(pa))
+  pa <- tryCatch(psych::fa.parallel(dades_afe, fm = "minres", fa = "fa",
+                                    plot = FALSE, n.iter = 100), error = function(e) NULL)
+cat("Factors suggerits per anàlisi paral·lela:",
+    if (is.null(pa)) "no disponible" else pa$nfact, "\n")
 
 # Mapa teòric ítem -> dimensió (per comparar amb l'empíric)
 teoria_dim <- c(coh01="D1",coh02="D1",coh03="D1",coh04="D1",coh05="D2",
@@ -768,8 +773,12 @@ cat("\n--- Comparació de solucions ---\n"); print(as.data.frame(afe_resum), row
 
 # ---- D4. Gràfic scree / anàlisi paral·lela --------------------------------
 png("sortides/afe_scree.png", width = 800, height = 600, res = 110)
-psych::fa.parallel(dades_afe, fm = "minres", fa = "fa", cor = "poly", n.iter = 100,
-                   main = "AFE Bloc 1 · Scree i anàlisi paral·lela")
+tryCatch(
+  psych::fa.parallel(dades_afe, fm = "minres", fa = "fa", cor = "poly", n.iter = 100,
+                     main = "AFE Bloc 1 · Scree i anàlisi paral·lela"),
+  error = function(e)
+    psych::fa.parallel(dades_afe, fm = "minres", fa = "fa", n.iter = 100,
+                       main = "AFE Bloc 1 · Scree i anàlisi paral·lela (Pearson)"))
 dev.off()
 
 # ---- D5. Exportar ---------------------------------------------------------
@@ -869,9 +878,13 @@ kmo_f<- psych::KMO(Rf)
 bar_f<- psych::cortest.bartlett(Rf, n = nrow(df_f))
 cat(sprintf("KMO = %.3f | Bartlett p = %.2g\n", kmo_f$MSA, bar_f$p.value))
 set.seed(2024)
-pa_f <- psych::fa.parallel(df_f, fm = "minres", fa = "fa", cor = "poly",
-                           plot = FALSE, n.iter = 100)
-cat("Factors suggerits per paral·lela:", pa_f$nfact, "\n")
+pa_f <- tryCatch(psych::fa.parallel(df_f, fm = "minres", fa = "fa", cor = "poly",
+                                    plot = FALSE, n.iter = 100), error = function(e) NULL)
+if (is.null(pa_f))
+  pa_f <- tryCatch(psych::fa.parallel(df_f, fm = "minres", fa = "fa",
+                                      plot = FALSE, n.iter = 100), error = function(e) NULL)
+cat("Factors suggerits per paral·lela:",
+    if (is.null(pa_f)) "no disponible" else pa_f$nfact, "\n")
 
 afe23_loadings <- list(); afe23_models <- list()
 for (k in 2:3) {
