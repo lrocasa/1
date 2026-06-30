@@ -1030,7 +1030,21 @@ tests_rols <- map_dfr(rol_segs, ~ compara_segment(dades, .x, constructes = const
 cat("\n===== TESTS: TÉ EL ROL vs NO, per constructe (Cohen d, IC, p Holm) =====\n")
 print(as.data.frame(tests_rols), row.names = FALSE)
 
-write_xlsx(list("Prevalenca_rols" = prevalenca_rols, "Tests_rols" = tests_rols),
+# Nombre de rols per persona (polivalència / possible sobrecàrrega): variable
+# CONTÍNUA -> correlació de Spearman amb els constructes (teòric + empíric).
+dades$n_rols <- vapply(rols_persona, length, integer(1))
+cat("\n--- Nombre de rols per persona ---\n"); print(table(dades$n_rols))
+cor_nrols <- map_dfr(constr_tot, function(cc) {
+  d <- dades %>% transmute(x = n_rols, y = .data[[cc]]) %>% drop_na()
+  ct <- suppressWarnings(cor.test(d$x, d$y, method = "spearman"))
+  tibble(construct = cc, n = nrow(d),
+         rho = round(unname(ct$estimate),3), p = round(ct$p.value,4))
+}) %>% mutate(p_adj = round(p.adjust(p, "BH"),4))
+cat("\n--- n_rols vs constructes (Spearman) ---\n")
+print(as.data.frame(cor_nrols), row.names = FALSE)
+
+write_xlsx(list("Prevalenca_rols" = prevalenca_rols, "Tests_rols" = tests_rols,
+                "n_rols_Spearman" = cor_nrols),
            "sortides/resultats_rols_multiples.xlsx")
 
 # ===========================================================================
@@ -1228,79 +1242,9 @@ write_xlsx(list(
   "Correl_p"   = as.data.frame(round(cc_obj$p,4)) %>% rownames_to_column("constructe")
 ), "sortides/resultats_comparacions_extra.xlsx")
 
-# ===========================================================================
-#  PART K · MATRIU MESTRA DE COMPARACIONS (tota variable x tot constructe)
-#  Vista exploratòria completa i CONSISTENT: cada variable es prova amb el test
-#  adequat al seu tipus (binària->Mann-Whitney; multigrup->Kruskal-Wallis;
-#  contínua/ordinal->Spearman) i s'aplica UNA correcció FDR global (Benjamini-
-#  Hochberg) sobre tota la graella. Complementa (no substitueix) les anàlisis
-#  dirigides per hipòtesi (PARTS H, I) i les conceptualment diferents (AFE,
-#  omega, models de control, correlacions entre constructes).
-# ===========================================================================
-# n_rols: nombre de rols per persona (polivalència / possible sobrecàrrega)
-dades$n_rols <- vapply(rols_persona, length, integer(1))
-cat("\n===== NOMBRE DE ROLS PER PERSONA =====\n"); print(table(dades$n_rols))
-
-# Constructes (sense duplicats): 4 teòrics + 3 empírics del Bloc 1
-constr_master <- c(constructes_clau, constructes_emp)
-
-to_SiNo <- function(x) {
-  if (is.factor(x)) return(droplevels(x))
-  factor(ifelse(x == 1 | x == "Sí", "Sí", "No"), levels = c("No","Sí"))
-}
-fila_bin <- function(df, v, cc, min_cell = 5) {
-  d <- tibble(g = to_SiNo(df[[v]]), y = df[[cc]]) %>% drop_na() %>% mutate(g = droplevels(g))
-  if (nlevels(d$g) < 2 || any(table(d$g) < min_cell)) return(NULL)
-  wt <- suppressWarnings(wilcox.test(y ~ g, data = d))
-  r  <- tryCatch(rstatix::wilcox_effsize(d, y ~ g)$effsize, error = function(e) NA_real_)
-  tibble(variable = v, tipus = "binària", construct = cc, test = "Mann-Whitney",
-         p = wt$p.value, efecte = abs(r), mesura = "r", n = nrow(d))
-}
-fila_multi <- function(df, v, cc, min_cell = 3) {
-  d <- tibble(g = droplevels(factor(df[[v]])), y = df[[cc]]) %>% drop_na() %>%
-    group_by(g) %>% filter(n() >= min_cell) %>% ungroup() %>% mutate(g = droplevels(g))
-  if (nlevels(d$g) < 2) return(NULL)
-  kt <- kruskal.test(y ~ g, data = d)
-  e  <- tryCatch(rstatix::kruskal_effsize(d, y ~ g)$effsize, error = function(e) NA_real_)
-  tibble(variable = v, tipus = "multigrup", construct = cc, test = "Kruskal-Wallis",
-         p = kt$p.value, efecte = e, mesura = "epsilon2", n = nrow(d))
-}
-fila_cont <- function(df, v, cc) {
-  d <- tibble(x = df[[v]], y = df[[cc]]) %>% drop_na()
-  if (nrow(d) < 10) return(NULL)
-  ct <- suppressWarnings(cor.test(d$x, d$y, method = "spearman"))
-  tibble(variable = v, tipus = "contínua", construct = cc, test = "Spearman",
-         p = ct$p.value, efecte = abs(unname(ct$estimate)), mesura = "rho", n = nrow(d))
-}
-
-vars_bin_master   <- c("EeX_f","EeXAMC_f","EdD_f","GdE_proj","particip_FECC","Xarxa",
-                       paste0("rolind_", grups_rol))
-vars_multi_master <- c("ServeiTerr_grup","Complexitat_grup","Cargo_grup","NivellJerarquic")
-vars_cont_master  <- c("n_rols","n_projectes_FECC","q23_dir","q25_dir","q24_anys_ord")
-vars_doc_master   <- c(vars_etapes, vars_ambits)   # només docents
-
-master <- bind_rows(
-  map_dfr(vars_bin_master,   function(v) map_dfr(constr_master, function(cc) fila_bin(dades, v, cc))),
-  map_dfr(vars_multi_master, function(v) map_dfr(constr_master, function(cc) fila_multi(dades, v, cc))),
-  map_dfr(vars_cont_master,  function(v) map_dfr(constr_master, function(cc) fila_cont(dades, v, cc))),
-  map_dfr(vars_doc_master,   function(v) map_dfr(constr_master, function(cc) fila_bin(docents_df, v, cc)))
-) %>%
-  mutate(p = round(p,4), efecte = round(efecte,3),
-         p_FDR = round(p.adjust(p, "BH"),4), signif_FDR = p_FDR < 0.05) %>%
-  arrange(p)
-cat(sprintf("\n===== MATRIU MESTRA: %d comparacions =====\n", nrow(master)))
-cat("Significatives després de FDR global (BH):\n")
-print(as.data.frame(filter(master, signif_FDR)), row.names = FALSE)
-cat("\n(Top 15 per p sense corregir — mapa exploratori:)\n")
-print(as.data.frame(head(master, 15)), row.names = FALSE)
-write_xlsx(list("Matriu_mestra" = master,
-                "Significatives_FDR" = filter(master, signif_FDR)),
-           "sortides/resultats_matriu_mestra.xlsx")
-
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
-    " - resultats_matriu_mestra.xlsx (TOTA variable x tot constructe, FDR global)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
     " - resultats_control_empiric.xlsx (ítems 23-24-25 vs constructes EMPÍRICS)\n",
     " - resultats_afe.xlsx (AFE del Bloc 1)\n",
