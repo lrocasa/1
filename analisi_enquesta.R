@@ -700,8 +700,81 @@ write_xlsx(list(
   "Coef_controls"     = coef_controls
 ), "sortides/resultats_control.xlsx")
 
+# ===========================================================================
+#  PART D · ANÀLISI FACTORIAL EXPLORATÒRIA (AFE) del BLOC 1
+#  Decisions: explorar 3-5 factors · matriu POLICÒRICA · rotació OBLIMIN ·
+#  casos complets (listwise). Objectiu: veure si els 17 ítems s'agrupen en
+#  les dimensions teòriques previstes.
+# ===========================================================================
+items_afe <- bloc1_corregits                      # 17 ítems (6 i 13 invertits)
+dades_afe <- na.omit(as.data.frame(dades[, items_afe]))
+cat("\n===== AFE · BLOC 1 =====\nCasos (listwise):", nrow(dades_afe),
+    "| Ítems:", length(items_afe), "\n")
+
+# ---- D1. Adequació mostral ------------------------------------------------
+Rpoly <- psych::polychoric(dades_afe)$rho        # matriu de correlacions policòrica
+kmo   <- psych::KMO(Rpoly)
+bart  <- psych::cortest.bartlett(Rpoly, n = nrow(dades_afe))
+cat(sprintf("KMO global = %.3f | Bartlett: chi2=%.0f, p=%.2g\n",
+            kmo$MSA, bart$chisq, bart$p.value))
+
+# ---- D2. Nombre de factors: anàlisi paral·lela (referència) ---------------
+set.seed(2024)
+pa <- psych::fa.parallel(dades_afe, fm = "minres", fa = "fa", cor = "poly",
+                         plot = FALSE, n.iter = 100)
+cat("Factors suggerits per anàlisi paral·lela:", pa$nfact, "\n")
+
+# Mapa teòric ítem -> dimensió (per comparar amb l'empíric)
+teoria_dim <- c(coh01="D1",coh02="D1",coh03="D1",coh04="D1",coh05="D2",
+                coh06_r="Dm",coh07="D3",coh08="D3",coh09="D4",coh10="D4",
+                coh11="D5",coh12="D5",coh13_r="D6",coh14="D6.1",coh15="D7",
+                coh16="D4",coh17="D8")
+
+# ---- D3. Solucions de 3, 4 i 5 factors (policòrica + oblimin) -------------
+afe_models   <- list()
+afe_loadings <- list()
+afe_resum    <- list()
+for (k in 3:5) {
+  fa_k <- psych::fa(Rpoly, nfactors = k, rotate = "oblimin",
+                    fm = "minres", n.obs = nrow(dades_afe))
+  afe_models[[paste0("F", k)]] <- fa_k
+
+  # Càrregues en format llarg + assignació al factor dominant + dimensió teòrica
+  L <- unclass(fa_k$loadings)
+  ld <- as.data.frame(round(L, 3)) %>% rownames_to_column("item")
+  ld$factor_dominant <- paste0("MR", apply(abs(L), 1, which.max))
+  ld$carrega_max     <- round(apply(L, 1, function(r) r[which.max(abs(r))]), 3)
+  ld$dimensio_teorica<- teoria_dim[ld$item]
+  afe_loadings[[paste0("F", k)]] <- ld
+
+  vexp <- sum(fa_k$Vaccounted["Proportion Var", ])
+  afe_resum[[paste0("F", k)]] <- tibble(
+    n_factors = k, var_explicada = round(100*vexp,1),
+    TLI = round(fa_k$TLI,3), RMSEA = round(fa_k$RMSEA[1],3),
+    BIC = round(fa_k$BIC,1))
+
+  cat(sprintf("\n--- AFE %d factors --- var=%.1f%% | TLI=%.2f | RMSEA=%.3f\n",
+              k, 100*vexp, fa_k$TLI, fa_k$RMSEA[1]))
+  print(fa_k$loadings, cutoff = 0.30, sort = TRUE)         # càrregues > .30
+  cat("Correlacions entre factors (Phi):\n"); print(round(fa_k$Phi, 2))
+}
+afe_resum <- bind_rows(afe_resum)
+cat("\n--- Comparació de solucions ---\n"); print(as.data.frame(afe_resum), row.names = FALSE)
+
+# ---- D4. Gràfic scree / anàlisi paral·lela --------------------------------
+png("sortides/afe_scree.png", width = 800, height = 600, res = 110)
+psych::fa.parallel(dades_afe, fm = "minres", fa = "fa", cor = "poly", n.iter = 100,
+                   main = "AFE Bloc 1 · Scree i anàlisi paral·lela")
+dev.off()
+
+# ---- D5. Exportar ---------------------------------------------------------
+write_xlsx(c(list("Resum_solucions" = afe_resum),
+             setNames(afe_loadings, paste0("Carregues_", names(afe_loadings)))),
+           "sortides/resultats_afe.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_control.xlsx (ítems 23-24-25: validesa i models)\n",
-    " - gràfics .png\n")
+    " - resultats_afe.xlsx (anàlisi factorial exploratòria del Bloc 1)\n",
+    " - gràfics .png (inclòs afe_scree.png)\n")
