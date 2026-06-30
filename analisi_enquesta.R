@@ -842,17 +842,18 @@ write_xlsx(list(
 #  propòsit s'agrupen en factors diferents. ~10 ítems (orientatiu amb n=143).
 #  Mateixa metodologia: policòrica, oblimin, anàlisi paral·lela.
 # ===========================================================================
+# NOMÉS ítems retinguts: el 21 i el 30 estan ELIMINATS per decisió i NO entren.
 df_f <- dades %>% transmute(
-  en18, en19r = en19_r, en20, en21r = 8 - en21,
+  en18, en19r = en19_r, en20,
   en26, en27r = en27_r,
-  prop28, prop29, prop30r = 8 - prop30, prop31)
+  prop28, prop29, prop31)
 df_f <- na.omit(as.data.frame(df_f))
-cat("\n===== AFE conjunta BLOC 2 + BLOC 3 =====\nCasos:", nrow(df_f),
+cat("\n===== AFE conjunta BLOC 2 + BLOC 3 (ítems retinguts) =====\nCasos:", nrow(df_f),
     "| Ítems:", ncol(df_f), "\n")
 
-teoria_f <- c(en18="Energia",en19r="Energia",en20="Energia",en21r="Energia",
+teoria_f <- c(en18="Energia",en19r="Energia",en20="Energia",
               en26="Recuperació",en27r="Recuperació",
-              prop28="Propòsit",prop29="Propòsit",prop30r="Propòsit",prop31="Propòsit")
+              prop28="Propòsit",prop29="Propòsit",prop31="Propòsit")
 
 Rf   <- psych::polychoric(df_f)$rho
 kmo_f<- psych::KMO(Rf)
@@ -893,15 +894,11 @@ assig_b23 <- tibble(
 cat("\n===== FACTORS EMPÍRICS Bloc 2+3 (2 factors) =====\n")
 print(as.data.frame(assig_b23), row.names = FALSE)
 
-# Per construir els índexs reaprofitem columnes de 'dades' amb les reversions
-# aplicades (els ítems negatius queden en sentit positiu, escala 1-7).
-dades <- dades %>% mutate(en21r_tmp = 8 - en21, prop30r_tmp = 8 - prop30)
+# Per construir els índexs reaprofitem columnes de 'dades' (reversions ja fetes).
 col_de <- function(it) dplyr::case_when(
-  it == "en19r"   ~ "en19_r",
-  it == "en27r"   ~ "en27_r",
-  it == "en21r"   ~ "en21r_tmp",
-  it == "prop30r" ~ "prop30r_tmp",
-  TRUE            ~ it)
+  it == "en19r" ~ "en19_r",
+  it == "en27r" ~ "en27_r",
+  TRUE          ~ it)
 
 emp_items_b23 <- assig_b23 %>% filter(assignat) %>% { split(.$item, .$factor) }
 for (f in names(emp_items_b23)) {
