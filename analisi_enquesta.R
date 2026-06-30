@@ -414,6 +414,11 @@ dades <- dades %>%
     EeX_f    = factor(EeX,    levels = c(0,1), labels = c("No","Sí")),
     EeXAMC_f = factor(EeXAMC, levels = c(0,1), labels = c("No","Sí")),
     EdD_f    = factor(EdD,    levels = c(0,1), labels = c("No","Sí")),
+    # Xarxa d'escoles: té denominació (nom) -> forma part d'una xarxa (Sí);
+    # "0" o buit -> no en forma part (No). Binari.
+    Xarxa = factor(ifelse(is.na(Denominacio) |
+                          trimws(as.character(Denominacio)) %in% c("0","","NA","nan"),
+                          "No", "Sí"), levels = c("No","Sí")),
 
     # Cargo agrupat segons la classificació definida (9 grups)
     Cargo_grup = fct_collapse(factor(Cargo),
@@ -435,7 +440,7 @@ dades <- dades %>%
 constructes_clau <- c("idx_funcionament_xarxa","idx_energia",
                       "idx_recuperacio","idx_alineament_proposit")
 segmentadors <- c("ServeiTerr_grup","Complexitat_grup","Cargo_grup",
-                  "EeX_f","EeXAMC_f","EdD_f")
+                  "EeX_f","EeXAMC_f","EdD_f","Xarxa")
 
 # ---- B2. Funció d'anàlisi: omnibus + mida d'efecte + correcció ------------
 # 2 grups  -> Welch t-test (+ Mann-Whitney) i Cohen d
