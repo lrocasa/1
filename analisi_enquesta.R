@@ -37,7 +37,7 @@
 # Aquest bloc instal·la els paquets que faltin i els carrega automàticament.
 # IMPORTANT: executa SEMPRE el script sencer des d'aquí (o fes 'Source').
 paquets <- c("tidyverse","readxl","psych","janitor","writexl",
-             "rstatix","effectsize")
+             "rstatix","effectsize","MBESS")
 for (p in paquets) {
   if (!requireNamespace(p, quietly = TRUE)) {
     install.packages(p, repos = "https://cloud.r-project.org")
@@ -195,6 +195,31 @@ for (nom in names(dimensions)) alpha_segur(dades, dimensions[[nom]], nom)
 #    = 1 ítem   -> no aplica (ítem únic)
 # Interpretació orientativa: >=.70 acceptable, >=.80 bona, >=.90 excel·lent.
 
+# Nombre de rèpliques bootstrap per als IC (baixa'l a 500 si va lent)
+B_BOOT <- 1000
+set.seed(2024)   # reproducibilitat dels IC
+
+# IC de la fiabilitat per bootstrap:
+#  >=3 ítems -> omega amb IC BCa via MBESS::ci.reliability
+#   =2 ítems -> IC percentil de Spearman-Brown (bootstrap manual)
+omega_ic <- function(x, k, B = B_BOOT) {
+  x <- x[stats::complete.cases(x), , drop = FALSE]
+  if (k < 2) return(c(NA_real_, NA_real_))
+  if (k == 2) {
+    bs <- replicate(B, {
+      idx <- sample(nrow(x), replace = TRUE)
+      r <- suppressWarnings(cor(x[idx, 1], x[idx, 2]))
+      2 * r / (1 + r)
+    })
+    return(unname(quantile(bs, c(.025, .975), na.rm = TRUE)))
+  }
+  res <- tryCatch(
+    MBESS::ci.reliability(data = x, type = "omega",
+                          interval.type = "bca", B = B),
+    error = function(e) NULL)
+  if (is.null(res)) c(NA_real_, NA_real_) else c(res$ci.lower, res$ci.upper)
+}
+
 fiab_omega <- function(df, items, etiqueta) {
   k <- length(items)
   x <- df[, items, drop = FALSE]
@@ -214,8 +239,11 @@ fiab_omega <- function(df, items, etiqueta) {
       error = function(e) NA_real_)
     met <- "omega total (McDonald)"
   }
+  ic <- if (k >= 2) omega_ic(x, k) else c(NA_real_, NA_real_)
   tibble(escala = etiqueta, n_items = k, n = n,
-         alpha = round(a, 3), omega = round(om, 3), metode = met)
+         alpha = round(a, 3), omega = round(om, 3),
+         omega_ic_low = round(ic[1], 3), omega_ic_high = round(ic[2], 3),
+         metode = met)
 }
 
 interpreta <- function(o) cut(o, c(-Inf, .60, .70, .80, .90, Inf),
