@@ -1083,6 +1083,104 @@ print(as.data.frame(dosi_fecc), row.names = FALSE)
 write_xlsx(list("Hipotesi_FECC" = tests_hipotesi, "Dosi_resposta" = dosi_fecc),
            "sortides/resultats_hipotesi_FECC.xlsx")
 
+# ===========================================================================
+#  PART I · ANÀLISI COMPARATIVA PER SUBGRUPS (no paramètrica)  [resol P1/P2]
+#  Proves de Mann-Whitney (2 grups) i Kruskal-Wallis (3+), adequades per la
+#  no-normalitat de les escales Likert. Subgrups: ROL (multi-pertinença),
+#  NIVELL JERÀRQUIC i CONTEXT TERRITORIAL. Sobre constructes teòrics i empírics.
+#  Mides d'efecte: r (Mann-Whitney), epsilon² (Kruskal-Wallis). Post-hoc: Dunn.
+# ===========================================================================
+
+# ---- I1. Nivell jeràrquic (definit per l'usuària; multi-rol -> nivell més alt)
+map_nivell <- function(x) {
+  x <- trimws(x)
+  dplyr::case_when(
+    grepl("Director.* [Gg]eneral", x) ~ "Governança de sistema",   # Dir. General/adjunt
+    grepl("Responsable", x)           ~ "Governança de sistema",   # Resp. de xarxa i Resp.
+    grepl("GdE", x)                   ~ "Governança intermèdia",
+    x == "Titular"                    ~ "Governança intermèdia",
+    grepl("Tècnic", x)                ~ "Governança intermèdia",
+    grepl("Directora|Subdirector|Cap [Ee]studis|Coordinador Infantil|Coordinador CF", x) ~ "Nucli operatiu",
+    grepl("Professor|Mestre|Pastoral|TIC|Orientador|COCOBE", x) ~ "Nucli operatiu",
+    x == "PAS"                        ~ "Nucli operatiu",
+    x %in% c("APSEC","CCAPAC","APPEC") | grepl("Comité d'ètica", x) ~ "Comunitat i altres",
+    TRUE ~ NA_character_)             # 'FECC' genèric: el resolen els altres tokens (subcargo)
+}
+prio_niv <- c("Governança de sistema"=4, "Governança intermèdia"=3,
+              "Nucli operatiu"=2, "Comunitat i altres"=1)
+dades$NivellJerarquic <- factor(vapply(seq_len(nrow(dades)), function(i) {
+  toks <- c(as.character(dades$Cargo[i]),
+            unlist(strsplit(as.character(dades$Subcargo[i]), "/", fixed = TRUE)))
+  toks <- trimws(toks); toks <- toks[!toks %in% c("","0","NA","nan")]
+  ls <- stats::na.omit(map_nivell(toks))
+  if (length(ls) == 0) NA_character_ else names(which.max(prio_niv[ls]))
+}, character(1)),
+levels = c("Nucli operatiu","Governança intermèdia","Governança de sistema","Comunitat i altres"))
+cat("\n===== NIVELL JERÀRQUIC (distribució) =====\n")
+print(table(dades$NivellJerarquic, useNA = "ifany"))
+
+constr_tot <- c(constructes_clau, constructes_emp, constructes_b23)
+
+# ---- I2. Kruskal-Wallis (3+ grups): nivell jeràrquic i territori -----------
+kw_subgrups <- function(df, fvar, constructes, min_cell = 3) {
+  map_dfr(constructes, function(cc) {
+    d <- df %>% transmute(g = droplevels(factor(.data[[fvar]])), y = .data[[cc]]) %>%
+      drop_na() %>% group_by(g) %>% filter(n() >= min_cell) %>% ungroup() %>%
+      mutate(g = droplevels(g))
+    if (nlevels(d$g) < 2) return(NULL)
+    kt <- kruskal.test(y ~ g, data = d)
+    es <- tryCatch(rstatix::kruskal_effsize(d, y ~ g)$effsize, error = function(e) NA_real_)
+    tibble(variable = fvar, construct = cc, k = nlevels(d$g), n = nrow(d),
+           H = round(unname(kt$statistic),2), p = round(kt$p.value,4),
+           epsilon2 = round(es,3))
+  }) %>% mutate(p_adj = round(p.adjust(p, "holm"),4))
+}
+tests_kw <- bind_rows(
+  kw_subgrups(dades, "NivellJerarquic", constr_tot),
+  kw_subgrups(dades, "ServeiTerr_grup", constr_tot))
+cat("\n===== KRUSKAL-WALLIS · nivell jeràrquic i territori =====\n")
+print(as.data.frame(tests_kw), row.names = FALSE)
+
+# Post-hoc de Dunn (Holm) per als Kruskal-Wallis significatius
+kw_sig <- tests_kw %>% filter(p_adj < 0.05)
+dunn_list <- list()
+for (i in seq_len(nrow(kw_sig))) {
+  fvar <- kw_sig$variable[i]; cc <- kw_sig$construct[i]
+  d <- dades %>% transmute(g = droplevels(factor(.data[[fvar]])), y = .data[[cc]]) %>% drop_na()
+  ph <- rstatix::dunn_test(d, y ~ g, p.adjust.method = "holm")
+  dunn_list[[paste(fvar, cc, sep="__")]] <- as.data.frame(ph)
+  cat(sprintf("\n--- Dunn post-hoc: %s ~ %s ---\n", cc, fvar))
+  print(ph[, c("group1","group2","statistic","p.adj","p.adj.signif")])
+}
+if (!nrow(kw_sig)) cat("\n(Cap Kruskal-Wallis significatiu després de la correcció.)\n")
+
+# ---- I3. Mann-Whitney (té el rol vs no), per als rols amb >=5 membres ------
+mw_rols <- function(df, rol_vars, constructes, min_cell = 5) {
+  map_dfr(rol_vars, function(rv) {
+    map_dfr(constructes, function(cc) {
+      d <- df %>% transmute(g = droplevels(factor(.data[[rv]])), y = .data[[cc]]) %>% drop_na()
+      if (nlevels(d$g) < 2 || any(table(d$g) < min_cell)) return(NULL)
+      wt <- suppressWarnings(wilcox.test(y ~ g, data = d))
+      r  <- tryCatch(rstatix::wilcox_effsize(d, y ~ g)$effsize, error = function(e) NA_real_)
+      m  <- tapply(d$y, d$g, median)
+      tibble(rol = sub("rolind_","",rv), construct = cc,
+             md_No = round(m["No"],2), md_Si = round(m["Sí"],2),
+             p = round(wt$p.value,4), r_efecte = round(r,3))
+    })
+  }) %>% group_by(rol) %>% mutate(p_adj = round(p.adjust(p,"holm"),4)) %>% ungroup()
+}
+rol_vars   <- paste0("rolind_", prevalenca_rols$rol[prevalenca_rols$n_multi >= 5])
+tests_mw_rols <- mw_rols(dades, rol_vars, constr_tot)
+cat("\n===== MANN-WHITNEY · rol (multi-pertinença) té vs no =====\n")
+print(as.data.frame(tests_mw_rols), row.names = FALSE)
+
+# ---- I4. Exportar ---------------------------------------------------------
+write_xlsx(c(list("KW_nivell_territori" = tests_kw,
+                  "MW_rols"             = tests_mw_rols),
+             if (length(dunn_list)) setNames(dunn_list,
+               substr(paste0("Dunn_", names(dunn_list)),1,31))),
+           "sortides/resultats_subgrups_noparam.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
@@ -1093,4 +1191,5 @@ cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_empiriques.xlsx (dimensions empíriques: fiab. + segm. + control)\n",
     " - resultats_rols_multiples.xlsx (rols múltiples Cargo+Subcargo)\n",
     " - resultats_hipotesi_FECC.xlsx (hipòtesi participació en projectes FECC)\n",
+    " - resultats_subgrups_noparam.xlsx (Mann-Whitney/Kruskal-Wallis: rol, nivell, territori)\n",
     " - gràfics .png (inclòs afe_scree.png)\n")
