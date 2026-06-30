@@ -836,10 +836,55 @@ write_xlsx(list(
   "Models_control"    = models_control_emp
 ), "sortides/resultats_empiriques.xlsx")
 
+# ===========================================================================
+#  PART F · AFE CONJUNTA de BLOC 2 + BLOC 3
+#  Objectiu: comprovar la validesa discriminant -> si energia, recuperació i
+#  propòsit s'agrupen en factors diferents. ~10 ítems (orientatiu amb n=143).
+#  Mateixa metodologia: policòrica, oblimin, anàlisi paral·lela.
+# ===========================================================================
+df_f <- dades %>% transmute(
+  en18, en19r = en19_r, en20, en21r = 8 - en21,
+  en26, en27r = en27_r,
+  prop28, prop29, prop30r = 8 - prop30, prop31)
+df_f <- na.omit(as.data.frame(df_f))
+cat("\n===== AFE conjunta BLOC 2 + BLOC 3 =====\nCasos:", nrow(df_f),
+    "| Ítems:", ncol(df_f), "\n")
+
+teoria_f <- c(en18="Energia",en19r="Energia",en20="Energia",en21r="Energia",
+              en26="Recuperació",en27r="Recuperació",
+              prop28="Propòsit",prop29="Propòsit",prop30r="Propòsit",prop31="Propòsit")
+
+Rf   <- psych::polychoric(df_f)$rho
+kmo_f<- psych::KMO(Rf)
+bar_f<- psych::cortest.bartlett(Rf, n = nrow(df_f))
+cat(sprintf("KMO = %.3f | Bartlett p = %.2g\n", kmo_f$MSA, bar_f$p.value))
+set.seed(2024)
+pa_f <- psych::fa.parallel(df_f, fm = "minres", fa = "fa", cor = "poly",
+                           plot = FALSE, n.iter = 100)
+cat("Factors suggerits per paral·lela:", pa_f$nfact, "\n")
+
+afe23_loadings <- list()
+for (k in 2:3) {
+  fa_k <- psych::fa(Rf, nfactors = k, rotate = "oblimin",
+                    fm = "minres", n.obs = nrow(df_f))
+  L <- unclass(fa_k$loadings)
+  ld <- as.data.frame(round(L,3)) %>% rownames_to_column("item") %>%
+    mutate(factor_dominant = paste0("MR", apply(abs(L),1,which.max)),
+           dimensio_teorica = teoria_f[item])
+  afe23_loadings[[paste0("F",k)]] <- ld
+  cat(sprintf("\n--- %d factors --- var=%.1f%% | TLI=%.2f | RMSEA=%.3f\n",
+      k, 100*sum(fa_k$Vaccounted["Proportion Var",]), fa_k$TLI, fa_k$RMSEA[1]))
+  print(fa_k$loadings, cutoff = 0.30, sort = TRUE)
+  cat("Correlacions entre factors (Phi):\n"); print(round(fa_k$Phi,2))
+}
+write_xlsx(setNames(afe23_loadings, paste0("Carregues_", names(afe23_loadings))),
+           "sortides/resultats_afe_bloc23.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_control.xlsx (ítems 23-24-25: validesa i models)\n",
-    " - resultats_afe.xlsx (anàlisi factorial exploratòria del Bloc 1)\n",
+    " - resultats_afe.xlsx (AFE del Bloc 1)\n",
+    " - resultats_afe_bloc23.xlsx (AFE conjunta Bloc 2 + Bloc 3)\n",
     " - resultats_empiriques.xlsx (dimensions empíriques: fiab. + segm. + control)\n",
     " - gràfics .png (inclòs afe_scree.png)\n")
