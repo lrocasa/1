@@ -863,10 +863,11 @@ pa_f <- psych::fa.parallel(df_f, fm = "minres", fa = "fa", cor = "poly",
                            plot = FALSE, n.iter = 100)
 cat("Factors suggerits per paral·lela:", pa_f$nfact, "\n")
 
-afe23_loadings <- list()
+afe23_loadings <- list(); afe23_models <- list()
 for (k in 2:3) {
   fa_k <- psych::fa(Rf, nfactors = k, rotate = "oblimin",
                     fm = "minres", n.obs = nrow(df_f))
+  afe23_models[[paste0("F",k)]] <- fa_k
   L <- unclass(fa_k$loadings)
   ld <- as.data.frame(round(L,3)) %>% rownames_to_column("item") %>%
     mutate(factor_dominant = paste0("MR", apply(abs(L),1,which.max)),
@@ -877,7 +878,65 @@ for (k in 2:3) {
   print(fa_k$loadings, cutoff = 0.30, sort = TRUE)
   cat("Correlacions entre factors (Phi):\n"); print(round(fa_k$Phi,2))
 }
-write_xlsx(setNames(afe23_loadings, paste0("Carregues_", names(afe23_loadings))),
+
+# ---- F2. Operacionalitzar els factors empírics del Bloc 2+3 (solució 2 factors)
+# L'AFE mostra que Energia i Recuperació NO es separen (van juntes) i que el
+# Propòsit és un factor a part. Construïm aquests factors empírics i hi repetim
+# fiabilitat + segmentadors + controls (com al Bloc 1), en paral·lel als teòrics.
+L2 <- unclass(afe23_models[["F2"]]$loadings)
+assig_b23 <- tibble(
+  item    = rownames(L2),
+  factor  = paste0("BF", apply(abs(L2),1,which.max)),
+  carrega = round(apply(L2,1,function(r) r[which.max(abs(r))]),3)) %>%
+  mutate(assignat = abs(carrega) >= CARREGA_MIN,
+         dimensio_teorica = teoria_f[item])
+cat("\n===== FACTORS EMPÍRICS Bloc 2+3 (2 factors) =====\n")
+print(as.data.frame(assig_b23), row.names = FALSE)
+
+# Per construir els índexs reaprofitem columnes de 'dades' amb les reversions
+# aplicades (els ítems negatius queden en sentit positiu, escala 1-7).
+dades <- dades %>% mutate(en21r_tmp = 8 - en21, prop30r_tmp = 8 - prop30)
+col_de <- function(it) dplyr::case_when(
+  it == "en19r"   ~ "en19_r",
+  it == "en27r"   ~ "en27_r",
+  it == "en21r"   ~ "en21r_tmp",
+  it == "prop30r" ~ "prop30r_tmp",
+  TRUE            ~ it)
+
+emp_items_b23 <- assig_b23 %>% filter(assignat) %>% { split(.$item, .$factor) }
+for (f in names(emp_items_b23)) {
+  cols <- vapply(emp_items_b23[[f]], col_de, character(1))
+  dades[[paste0("idx_", f)]] <- rowMeans(dades[, cols, drop = FALSE], na.rm = TRUE)
+}
+constructes_b23 <- paste0("idx_", names(emp_items_b23))
+
+# Fiabilitat (omega) dels factors empírics Bloc 2+3
+fiab_items_b23 <- lapply(emp_items_b23, function(its) vapply(its, col_de, character(1)))
+taula_fiab_b23 <- map_dfr(names(fiab_items_b23),
+  ~ fiab_omega(dades, fiab_items_b23[[.x]], paste0("Empíric Bloc2+3 ", .x))) %>%
+  mutate(valoracio = interpreta(omega))
+cat("\n--- Fiabilitat (omega) factors empírics Bloc 2+3 ---\n")
+print(as.data.frame(taula_fiab_b23), row.names = FALSE)
+
+# Segmentadors i models de control sobre els factors empírics Bloc 2+3
+taula_tests_b23 <- map_dfr(segmentadors,
+  ~ compara_segment(dades, .x, constructes = constructes_b23)) %>%
+  mutate(across(c(p,p_noparam,p_adj,efecte,ef_ic_low,ef_ic_high), ~round(.x,4)))
+cat("\n--- Tests per segmentador (factors empírics Bloc 2+3) ---\n")
+print(as.data.frame(taula_tests_b23), row.names = FALSE)
+
+models_control_b23 <- map_dfr(constructes_b23, function(cc)
+  map_dfr(segmentadors, ~ model_control(cc, .x))) %>%
+  group_by(construct) %>% mutate(p_seg_adj = round(p.adjust(p_segment,"holm"),4)) %>%
+  ungroup()
+cat("\n--- Models de control (factors empírics Bloc 2+3) ---\n")
+print(as.data.frame(models_control_b23), row.names = FALSE)
+
+write_xlsx(c(setNames(afe23_loadings, paste0("Carregues_", names(afe23_loadings))),
+             list("Assignacio_items"  = assig_b23,
+                  "Fiabilitat_omega"  = taula_fiab_b23,
+                  "Tests_segmentador" = taula_tests_b23,
+                  "Models_control"    = models_control_b23)),
            "sortides/resultats_afe_bloc23.xlsx")
 
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
