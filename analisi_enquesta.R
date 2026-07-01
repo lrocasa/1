@@ -1401,11 +1401,73 @@ print(as.data.frame(rwg_res), row.names = FALSE)
 write_xlsx(list("ICC_escola" = taula_icc, "rwg_consens" = rwg_res),
            "sortides/resultats_acord_escola.xlsx")
 
+# ===========================================================================
+#  PART N · ANÀLISI A NIVELL D'ESCOLA (unitat = escola)
+#  Agrega els constructes a la MITJANA de cada escola i prova els segmentadors
+#  D'ESCOLA (xarxa, complexitat, territori). Complementa l'anàlisi individual;
+#  té sentit sobretot per als constructes amb component d'escola (energia,
+#  recuperació, funcionament). Exploratori (n d'escoles baixa).
+# ===========================================================================
+escola_nivell <- dades %>% filter(!den_buit(Escola)) %>%
+  group_by(escola_key) %>%
+  summarise(n_resp = n(),
+            across(all_of(constr_esc), ~ mean(.x, na.rm = TRUE)),
+            Xarxa_esc = if (any(!den_buit(Denominacio))) "Sí" else "No",
+            Complexitat_m = mean(suppressWarnings(as.numeric(Complexitat)), na.rm = TRUE),
+            ServeiTerr_esc = { t <- table(ServeiTerr_grup)
+                               if (length(t)) names(t)[which.max(t)] else NA_character_ },
+            .groups = "drop") %>%
+  mutate(Xarxa_esc = factor(Xarxa_esc, levels = c("No","Sí")),
+         Complexitat_grup_esc = cut(Complexitat_m, c(-Inf,.30,.50,.60,Inf),
+                                    labels = c("0-0,30","0,31-0,50","0,51-0,60","0,61-1")))
+cat(sprintf("\n===== ANÀLISI A NIVELL D'ESCOLA (%d escoles) =====\n", nrow(escola_nivell)))
+cat("En xarxa:", sum(escola_nivell$Xarxa_esc=="Sí"), "| independents:",
+    sum(escola_nivell$Xarxa_esc=="No"), "\n")
+
+mw_esc <- function(df, seg, constructes) {
+  r <- map_dfr(constructes, function(cc) {
+    d <- df %>% transmute(g = droplevels(factor(.data[[seg]])), y = .data[[cc]]) %>% drop_na()
+    if (nlevels(d$g) != 2 || any(table(d$g) < 3)) return(NULL)
+    wt <- suppressWarnings(wilcox.test(y ~ g, data = d))
+    e  <- tryCatch(rstatix::wilcox_effsize(d, y ~ g)$effsize, error = function(e) NA_real_)
+    m  <- tapply(d$y, d$g, median)
+    tibble(segmentador = seg, construct = cc, n_escoles = nrow(d),
+           md_No = round(m["No"],2), md_Si = round(m["Sí"],2),
+           p = round(wt$p.value,4), r_efecte = round(e,3))
+  })
+  if (nrow(r)) r %>% mutate(p_adj = round(p.adjust(p,"holm"),4)) else r
+}
+kw_esc <- function(df, seg, constructes, min_cell = 3) {
+  r <- map_dfr(constructes, function(cc) {
+    d <- df %>% transmute(g = droplevels(factor(.data[[seg]])), y = .data[[cc]]) %>% drop_na() %>%
+      group_by(g) %>% filter(n() >= min_cell) %>% ungroup() %>% mutate(g = droplevels(g))
+    if (nlevels(d$g) < 2) return(NULL)
+    kt <- kruskal.test(y ~ g, data = d)
+    e  <- tryCatch(rstatix::kruskal_effsize(d, y ~ g)$effsize, error = function(e) NA_real_)
+    tibble(segmentador = seg, construct = cc, k = nlevels(d$g), n_escoles = nrow(d),
+           H = round(unname(kt$statistic),2), p = round(kt$p.value,4), epsilon2 = round(e,3))
+  })
+  if (nrow(r)) r %>% mutate(p_adj = round(p.adjust(p,"holm"),4)) else r
+}
+tests_escola_xarxa   <- mw_esc(escola_nivell, "Xarxa_esc", constr_esc)
+tests_escola_complex <- kw_esc(escola_nivell, "Complexitat_grup_esc", constr_esc)
+tests_escola_territ  <- kw_esc(escola_nivell, "ServeiTerr_esc", constr_esc)
+cat("\n--- Xarxa (escola): Mann-Whitney ---\n");   print(as.data.frame(tests_escola_xarxa), row.names = FALSE)
+cat("\n--- Complexitat (escola): Kruskal-Wallis ---\n"); print(as.data.frame(tests_escola_complex), row.names = FALSE)
+cat("\n--- Servei Territorial (escola): Kruskal-Wallis ---\n"); print(as.data.frame(tests_escola_territ), row.names = FALSE)
+
+write_xlsx(list("Escoles_mitjanes" = escola_nivell,
+                "Xarxa_escola"     = tests_escola_xarxa,
+                "Complexitat_escola" = tests_escola_complex,
+                "Territori_escola" = tests_escola_territ),
+           "sortides/resultats_nivell_escola.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
     " - resultats_acord_escola.xlsx (ICC i consens intra-escola)\n",
+    " - resultats_nivell_escola.xlsx (constructes agregats per escola + segmentadors)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
     " - resultats_control_empiric.xlsx (ítems 23-24-25 vs constructes EMPÍRICS)\n",
     " - resultats_afe.xlsx (AFE del Bloc 1)\n",
