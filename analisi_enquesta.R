@@ -92,6 +92,21 @@ noms_curts <- c(
 stopifnot(length(noms_curts) == ncol(dades))
 names(dades) <- noms_curts
 
+# ---- 2b. Neteja: propagar la Denominació a nivell d'escola -----------------
+# Errors detectats i confirmats: dins d'algunes escoles, algun enquestat no va
+# omplir la denominació tot i pertànyer a una xarxa (COR DE MARIA, IPSE, MARE DEL
+# DIVÍ PASTOR, SANT JOAN BOSCO, SANTA TERESA DE JESÚS). Regla general: dins de
+# cada escola, si ALGUNA resposta té denominació, s'assigna a totes les respostes
+# d'aquella escola; si TOTES són buides, l'escola no forma part de cap xarxa.
+den_buit <- function(x) is.na(x) | trimws(as.character(x)) %in% c("0","","NA","nan")
+dades <- dades %>%
+  group_by(.esc_key = toupper(trimws(as.character(Escola)))) %>%
+  mutate(.den_esc = { v <- Denominacio[!den_buit(Denominacio)]
+                      if (length(v) > 0) as.character(v[1]) else NA_character_ },
+         Denominacio = ifelse(!den_buit(Escola) & den_buit(Denominacio) & !is.na(.den_esc),
+                              .den_esc, as.character(Denominacio))) %>%
+  ungroup() %>% select(-.esc_key, -.den_esc)
+
 # ---- 3. Multiresposta: de text/buit -> 0/1 --------------------------------
 a_binaria <- function(x) as.integer(!is.na(x) & x != "")
 
