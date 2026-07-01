@@ -1408,16 +1408,23 @@ write_xlsx(list("ICC_escola" = taula_icc, "rwg_consens" = rwg_res),
 #  té sentit sobretot per als constructes amb component d'escola (energia,
 #  recuperació, funcionament). Exploratori (n d'escoles baixa).
 # ===========================================================================
+# nombre de factors d'estrès marcats per persona (per agregar-lo a escola)
+dades <- dades %>% mutate(n_estres = rowSums(across(all_of(vars_estres)), na.rm = TRUE))
+
 escola_nivell <- dades %>% filter(!den_buit(Escola)) %>%
   group_by(escola_key) %>%
   summarise(n_resp = n(),
             across(all_of(constr_esc), ~ mean(.x, na.rm = TRUE)),
+            across(all_of(vars_estres), ~ mean(.x, na.rm = TRUE)),  # proporció per factor
+            n_estres_esc = mean(n_estres, na.rm = TRUE),            # càrrega mitjana d'estrès
             Xarxa_esc = if (any(!den_buit(Denominacio))) "Sí" else "No",
+            particip_FECC_esc = if (any(particip_FECC == "Sí", na.rm = TRUE)) "Sí" else "No",
             Complexitat_m = mean(suppressWarnings(as.numeric(Complexitat)), na.rm = TRUE),
             ServeiTerr_esc = { t <- table(ServeiTerr_grup)
                                if (length(t)) names(t)[which.max(t)] else NA_character_ },
             .groups = "drop") %>%
   mutate(Xarxa_esc = factor(Xarxa_esc, levels = c("No","Sí")),
+         particip_FECC_esc = factor(particip_FECC_esc, levels = c("No","Sí")),
          Complexitat_grup_esc = cut(Complexitat_m, c(-Inf,.30,.50,.60,Inf),
                                     labels = c("0-0,30","0,31-0,50","0,51-0,60","0,61-1")))
 cat(sprintf("\n===== ANÀLISI A NIVELL D'ESCOLA (%d escoles) =====\n", nrow(escola_nivell)))
@@ -1456,10 +1463,36 @@ cat("\n--- Xarxa (escola): Mann-Whitney ---\n");   print(as.data.frame(tests_esc
 cat("\n--- Complexitat (escola): Kruskal-Wallis ---\n"); print(as.data.frame(tests_escola_complex), row.names = FALSE)
 cat("\n--- Servei Territorial (escola): Kruskal-Wallis ---\n"); print(as.data.frame(tests_escola_territ), row.names = FALSE)
 
+# --- Participació en projectes estratègics FECC (a nivell d'escola) ---------
+# Escola "participa" si ALGUN dels seus enquestats participa en algun projecte.
+tests_escola_fecc <- mw_esc(escola_nivell, "particip_FECC_esc",
+                            c(constr_esc, "n_estres_esc"))
+cat(sprintf("\n--- Participació FECC (escola): %d participen / %d no ---\n",
+            sum(escola_nivell$particip_FECC_esc=="Sí"), sum(escola_nivell$particip_FECC_esc=="No")))
+print(as.data.frame(tests_escola_fecc), row.names = FALSE)
+
+# --- Factors d'estrès agregats a nivell d'escola ---------------------------
+prev_estres_esc <- escola_nivell %>%
+  summarise(across(all_of(vars_estres), ~ round(mean(.x, na.rm = TRUE), 2))) %>%
+  pivot_longer(everything(), names_to = "factor", values_to = "prop_mitjana_escola") %>%
+  arrange(desc(prop_mitjana_escola))
+cat("\n--- Factors d'estrès: proporció mitjana per escola (top) ---\n")
+print(as.data.frame(head(prev_estres_esc, 8)), row.names = FALSE)
+
+# càrrega d'estrès de l'escola per xarxa i correlació amb energia
+tests_estres_xarxa <- mw_esc(escola_nivell, "Xarxa_esc", "n_estres_esc")
+cat("\n--- Càrrega d'estrès (escola) per xarxa ---\n"); print(as.data.frame(tests_estres_xarxa), row.names = FALSE)
+ce <- suppressWarnings(cor.test(escola_nivell$n_estres_esc, escola_nivell$idx_energia, method = "spearman"))
+cat(sprintf("Correlació (escola) càrrega d'estrès <-> energia: rho=%.2f p=%.3f\n",
+            unname(ce$estimate), ce$p.value))
+
 write_xlsx(list("Escoles_mitjanes" = escola_nivell,
                 "Xarxa_escola"     = tests_escola_xarxa,
                 "Complexitat_escola" = tests_escola_complex,
-                "Territori_escola" = tests_escola_territ),
+                "Territori_escola" = tests_escola_territ,
+                "ParticipacioFECC_escola" = tests_escola_fecc,
+                "Estres_prevalenca_escola" = prev_estres_esc,
+                "Estres_carrega_xarxa" = tests_estres_xarxa),
            "sortides/resultats_nivell_escola.xlsx")
 
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
