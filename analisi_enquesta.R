@@ -1618,134 +1618,69 @@ cat("Interpretació: 'mediació=SÍ' vol dir que l'efecte indirecte és signific
 write_xlsx(list("Mediacio" = taula_mediacio), "sortides/resultats_mediacio.xlsx")
 
 # ===========================================================================
-#  PART Q · ANÀLISI DE CLÚSTERS (perfils de coherència, energia i propòsit)
-#  Identifica perfils de participants amb patrons similars, per enriquir la
-#  interpretació i ORIENTAR LA SELECCIÓ per a entrevistes (perfils contrastats
-#  i casos extrems). k-means (validat amb jeràrquic Ward).
+#  PART Q · ANÀLISI DE CLÚSTERS (perfils per a interpretació i mostreig)
+#  Dues versions EMPÍRIQUES:
+#   A) 3 macro-constructes: funcionament, energia/recuperació, propòsit
+#   B) 6 dimensions: coherència (propòsit/equip/xarxa) + energia + recuperació + propòsit
+#  k-means (k triat per silueta; triangulat amb colze i gap), validat amb Ward.
+#  NOTA: el gap statistic indica estructura feble -> perfils DESCRIPTIUS per a
+#  mostreig intencional (contrastats, extrems, mixtos), no tipologia robusta.
 # ===========================================================================
 library(cluster)
-vars_clu <- c("funcionament","energia","recuperacio","proposit")
-dclu <- dades %>% transmute(
-  id_persona,
-  Funcionament = idx_funcionament_xarxa, Energia = idx_energia,
-  Recuperacio = idx_recuperacio, Proposit = idx_alineament_proposit,
-  Cargo_grup, NivellJerarquic, Xarxa, particip_FECC)
-Xc <- scale(as.matrix(dclu[, c("Funcionament","Energia","Recuperacio","Proposit")]))
+dades <- dades %>% mutate(idx_energia_recup = rowMeans(cbind(idx_energia, idx_recuperacio), na.rm = TRUE))
 
-# --- Nombre de clústers: silueta mitjana per k = 2..6 ----------------------
-set.seed(2024)
-sil_k <- sapply(2:6, function(k) {
-  km <- kmeans(Xc, centers = k, nstart = 25)
-  mean(cluster::silhouette(km$cluster, dist(Xc))[, 3]) })
-names(sil_k) <- 2:6
-cat("\n===== CLÚSTERS · triangulació del nombre de grups =====\n")
-cat("Silueta mitjana per k:\n"); print(round(sil_k, 3))
-# colze (WSS) i gap statistic per triangular la k
-wss_k <- sapply(2:6, function(k) { set.seed(1); kmeans(Xc, k, nstart = 25)$tot.withinss })
-names(wss_k) <- 2:6
-cat("WSS (mètode del colze):\n"); print(round(wss_k, 1))
-gap <- tryCatch(cluster::clusGap(Xc, FUN = kmeans, nstart = 25, K.max = 6, B = 50),
-                error = function(e) NULL)
-if (!is.null(gap)) { cat("Gap statistic per k=1..6:\n"); print(round(gap$Tab[, "gap"], 3)) }
-k_opt <- as.integer(names(sil_k)[which.max(sil_k)])
-cat("k triat (màxima silueta):", k_opt, "\n")
+fer_clusters <- function(cols, labels, nom, coh_vec, en_vec) {
+  M  <- as.matrix(dades[, cols]); colnames(M) <- labels
+  ok <- stats::complete.cases(M) & !is.na(coh_vec) & !is.na(en_vec)
+  M  <- M[ok, , drop = FALSE]; Xc <- scale(M)
+  ids <- dades$id_persona[ok]; seg <- dades[ok, c("Cargo_grup","NivellJerarquic","particip_FECC")]
+  set.seed(2024)
+  sil <- sapply(2:6, function(k) mean(cluster::silhouette(kmeans(Xc,k,nstart=25)$cluster, dist(Xc))[,3]))
+  k_opt <- (2:6)[which.max(sil)]
+  gap <- tryCatch(cluster::clusGap(Xc, kmeans, K.max = 6, B = 50, nstart = 25)$Tab[,"gap"],
+                  error = function(e) rep(NA_real_, 6))
+  set.seed(2024); km2 <- kmeans(Xc, k_opt, nstart = 50); km3 <- kmeans(Xc, 3, nstart = 50)
+  hc <- hclust(dist(Xc), "ward.D2")
+  base <- tibble(id_persona = ids) %>% bind_cols(as_tibble(M)) %>%
+    mutate(cluster = factor(km2$cluster), cluster3 = factor(km3$cluster),
+           cluster_hc = factor(cutree(hc, k_opt)),
+           z_coh = as.numeric(scale(coh_vec[ok])), z_en = as.numeric(scale(en_vec[ok])),
+           discordanca = round(z_coh - z_en, 2)) %>% bind_cols(seg)
+  perfil2 <- base %>% group_by(cluster) %>%
+    summarise(n = n(), across(all_of(labels), ~ round(mean(.x),2)), .groups = "drop")
+  perfil3 <- base %>% group_by(cluster3) %>%
+    summarise(n = n(), across(all_of(labels), ~ round(mean(.x),2)), .groups = "drop")
+  cen <- km2$centers[km2$cluster, , drop = FALSE]
+  base$dist_c <- round(sqrt(rowSums((Xc - cen)^2)), 2)
+  base$dist_g <- round(sqrt(rowSums(Xc^2)), 2)
+  repr  <- base %>% group_by(cluster) %>% slice_min(dist_c, n = 2, with_ties = FALSE) %>% ungroup()
+  extr  <- base %>% slice_max(dist_g, n = 6)
+  mixt1 <- base %>% filter(z_coh > 0.5, z_en < -0.5) %>% arrange(desc(discordanca))
+  mixt2 <- base %>% filter(z_coh < -0.5, z_en > 0.5) %>% arrange(discordanca)
+  cat(sprintf("\n===== CLÚSTERS versió %s (n=%d) =====\n", nom, nrow(base)))
+  cat("Silueta k2..6:", paste(round(sil,3), collapse=" "), "| k triat:", k_opt,
+      "| gap(k1)=", round(gap[1],2), "\n")
+  cat("Perfil k=", k_opt, ":\n", sep=""); print(as.data.frame(perfil2), row.names = FALSE)
+  cat("Perfil k=3:\n"); print(as.data.frame(perfil3), row.names = FALSE)
+  cat(sprintf("Casos mixtos: alta coh+baixa energia=%d | baixa coh+alta energia=%d\n",
+              nrow(mixt1), nrow(mixt2)))
+  write_xlsx(list(Perfil_k2 = perfil2, Perfil_k3 = perfil3, Representatius = repr,
+                  Extrems = extr, Mixt_coh_sense_energia = mixt1,
+                  Mixt_energia_sense_coh = mixt2, Assignacio = base),
+             paste0("sortides/resultats_clusters_", nom, ".xlsx"))
+  invisible(base)
+}
 
-# --- k-means final ---------------------------------------------------------
-set.seed(2024)
-km <- kmeans(Xc, centers = k_opt, nstart = 50)
-dclu$cluster <- factor(km$cluster)
+clA <- fer_clusters(
+  cols   = c("idx_funcionament_xarxa","idx_energia_recup","idx_alineament_proposit"),
+  labels = c("Funcionament","EnergiaRecup","Proposit"),
+  nom    = "A3", coh_vec = dades$idx_funcionament_xarxa, en_vec = dades$idx_energia_recup)
 
-# --- Validació: jeràrquic Ward i concordança amb k-means -------------------
-hc <- hclust(dist(Xc), method = "ward.D2")
-dclu$cluster_hc <- factor(cutree(hc, k = k_opt))
-cat("\nConcordança k-means vs jeràrquic (taula creuada):\n")
-print(table(kmeans = dclu$cluster, jerarquic = dclu$cluster_hc))
-
-# --- Perfil de cada clúster (mitjanes en escala original 1-7) --------------
-perfil <- dclu %>% group_by(cluster) %>%
-  summarise(n = n(),
-            across(c(Funcionament, Energia, Recuperacio, Proposit),
-                   ~ round(mean(.x, na.rm = TRUE), 2)), .groups = "drop")
-cat("\n===== PERFIL DELS CLÚSTERS (mitjanes 1-7) =====\n")
-print(as.data.frame(perfil), row.names = FALSE)
-
-# --- Composició dels clústers per segmentador (descriptiu) -----------------
-cat("\nClúster x Nivell jeràrquic:\n"); print(table(dclu$cluster, dclu$NivellJerarquic))
-cat("\nClúster x Participació FECC:\n"); print(table(dclu$cluster, dclu$particip_FECC))
-
-# --- Selecció per a ENTREVISTES -------------------------------------------
-# (a) casos REPRESENTATIUS: els més propers al centroide de cada clúster
-centres <- km$centers[km$cluster, , drop = FALSE]
-dclu$dist_centroide <- round(sqrt(rowSums((Xc - centres)^2)), 2)
-representatius <- dclu %>% group_by(cluster) %>%
-  slice_min(dist_centroide, n = 2, with_ties = FALSE) %>%
-  select(cluster, id_persona, Funcionament, Energia, Recuperacio, Proposit,
-         Cargo_grup, NivellJerarquic, dist_centroide) %>% ungroup()
-cat("\n===== CASOS REPRESENTATIUS per clúster (per a entrevistes) =====\n")
-print(as.data.frame(representatius), row.names = FALSE)
-
-# (b) casos EXTREMS: perfils més marcats (distància al centre global)
-dclu$dist_global <- round(sqrt(rowSums(Xc^2)), 2)
-extrems <- dclu %>% slice_max(dist_global, n = 6) %>%
-  select(id_persona, cluster, Funcionament, Energia, Recuperacio, Proposit,
-         Cargo_grup, dist_global)
-cat("\n===== CASOS EXTREMS (perfils més marcats) =====\n")
-print(as.data.frame(extrems), row.names = FALSE)
-
-# --- Solució de k=3 (subperfils, per enriquir la tria d'entrevistes) -------
-set.seed(2024)
-km3 <- kmeans(Xc, centers = 3, nstart = 50)
-dclu$cluster3 <- factor(km3$cluster)
-perfil3 <- dclu %>% group_by(cluster3) %>%
-  summarise(n = n(), across(c(Funcionament, Energia, Recuperacio, Proposit),
-                            ~ round(mean(.x, na.rm = TRUE), 2)), .groups = "drop")
-cat("\n===== PERFIL DELS CLÚSTERS k=3 (mitjanes 1-7) =====\n")
-print(as.data.frame(perfil3), row.names = FALSE)
-centres3 <- km3$centers[km3$cluster, , drop = FALSE]
-dclu$dist3 <- round(sqrt(rowSums((Xc - centres3)^2)), 2)
-rep3 <- dclu %>% group_by(cluster3) %>% slice_min(dist3, n = 2, with_ties = FALSE) %>%
-  select(cluster3, id_persona, Funcionament, Energia, Recuperacio, Proposit,
-         Cargo_grup, NivellJerarquic) %>% ungroup()
-cat("\nCasos representatius k=3:\n"); print(as.data.frame(rep3), row.names = FALSE)
-
-# --- Casos MIXTOS (coherència i energia discordants) -----------------------
-# z_func i z_energia; discordança = z_func - z_energia
-zf <- Xc[, "Funcionament"]; ze <- Xc[, "Energia"]
-dclu$z_func <- round(zf, 2); dclu$z_energia <- round(ze, 2)
-dclu$discordanca <- round(zf - ze, 2)   # + coherent sense energia | - energia sense coherència
-mixt_coh_sense_energia <- dclu %>% filter(zf > 0.5, ze < -0.5) %>%
-  arrange(desc(discordanca)) %>%
-  select(id_persona, Funcionament, Energia, Proposit, Cargo_grup, NivellJerarquic, discordanca)
-mixt_energia_sense_coh <- dclu %>% filter(zf < -0.5, ze > 0.5) %>%
-  arrange(discordanca) %>%
-  select(id_persona, Funcionament, Energia, Proposit, Cargo_grup, NivellJerarquic, discordanca)
-cat("\n===== CASOS MIXTOS: ALTA coherència + BAIXA energia =====\n")
-print(as.data.frame(mixt_coh_sense_energia), row.names = FALSE)
-cat("\n===== CASOS MIXTOS: BAIXA coherència + ALTA energia =====\n")
-print(as.data.frame(mixt_energia_sense_coh), row.names = FALSE)
-
-# --- Gràfics ---------------------------------------------------------------
-tryCatch({
-  ggsave("sortides/clusters_silueta.png",
-         factoextra::fviz_nbclust(Xc, kmeans, method = "silhouette"),
-         width = 7, height = 5, dpi = 120)
-  ggsave("sortides/clusters_mapa.png",
-         factoextra::fviz_cluster(km, data = Xc, geom = "point", ellipse.type = "convex") +
-           ggplot2::labs(title = "Clústers de perfils (coherència, energia, propòsit)"),
-         width = 8, height = 6, dpi = 120)
-}, error = function(e) cat("(gràfics de clúster omesos:", conditionMessage(e), ")\n"))
-
-write_xlsx(list("Perfil_clusters_k2" = perfil,
-                "Perfil_clusters_k3" = perfil3,
-                "Casos_representatius" = representatius,
-                "Casos_representatius_k3" = rep3,
-                "Casos_extrems" = extrems,
-                "Mixt_coherencia_sense_energia" = mixt_coh_sense_energia,
-                "Mixt_energia_sense_coherencia" = mixt_energia_sense_coh,
-                "Assignacio" = dclu %>% select(id_persona, cluster, cluster3,
-                               Funcionament, Energia, Recuperacio, Proposit,
-                               z_func, z_energia, discordanca)),
-           "sortides/resultats_clusters.xlsx")
+clB <- fer_clusters(
+  cols   = c("idx_EF3","idx_EF2","idx_EF1","idx_energia","idx_recuperacio","idx_alineament_proposit"),
+  labels = c("CoherProposit","CoherEquip","CoherXarxa","Energia","Recuperacio","Proposit"),
+  nom    = "B6", coh_vec = rowMeans(dades[, c("idx_EF1","idx_EF2","idx_EF3")], na.rm = TRUE),
+  en_vec = dades$idx_energia)
 
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
@@ -1753,7 +1688,7 @@ cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
     " - resultats_regressio.xlsx (regressió múltiple + supòsits + errors robustos)\n",
     " - resultats_mediacio.xlsx (mediació coherència/propòsit -> energia)\n",
-    " - resultats_clusters.xlsx (perfils + casos per a entrevistes)\n",
+    " - resultats_clusters_A3.xlsx i _B6.xlsx (perfils + casos per a entrevistes)\n",
     " - resultats_acord_escola.xlsx (ICC i consens intra-escola)\n",
     " - resultats_nivell_escola.xlsx (constructes agregats per escola + segmentadors)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
