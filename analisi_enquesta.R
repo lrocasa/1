@@ -1775,6 +1775,29 @@ g_hist <- ggplot(data.frame(n = n_est), aes(n)) +
        x = "Nombre de factors marcats", y = "Persones") + theme_minimal()
 ggsave("sortides/estres_distribucio_nfactors.png", g_hist, width = 8, height = 5, dpi = 120)
 
+# --- Acumulació d'estrès vs constructes (què reporten els sobrecarregats?) ---
+constr_p <- c("idx_funcionament_xarxa","idx_energia","idx_recuperacio",
+              "idx_alineament_proposit","idx_EF1","idx_EF2","idx_EF3")
+cor_nestres <- map_dfr(constr_p, function(cc) {
+  d <- dades %>% transmute(x = n_estres, y = .data[[cc]]) %>% drop_na()
+  ct <- suppressWarnings(cor.test(d$x, d$y, method = "spearman"))
+  tibble(construct = cc, rho = round(unname(ct$estimate),3), p = round(ct$p.value,4))
+}) %>% mutate(p_adj = round(p.adjust(p, "BH"),4))
+cat("\n===== Nombre de factors d'estrès vs CONSTRUCTES (Spearman) =====\n")
+print(as.data.frame(cor_nestres), row.names = FALSE)
+
+dades$estres_alt <- factor(ifelse(dades$n_estres >= 6, "6 o més", "menys de 6"),
+                           levels = c("menys de 6","6 o més"))
+comp_estres_alt <- map_dfr(constr_p, function(cc) {
+  d <- dades %>% transmute(g = estres_alt, y = .data[[cc]]) %>% drop_na()
+  m <- tapply(d$y, d$g, median); wt <- suppressWarnings(wilcox.test(y ~ g, data = d))
+  tibble(construct = cc, md_menys6 = round(m["menys de 6"],2),
+         md_6mes = round(m["6 o més"],2), p = round(wt$p.value,4))
+})
+cat(sprintf("\n===== MOLT sobrecarregats (>=6 factors, n=%d) vs resta =====\n",
+            sum(dades$n_estres >= 6)))
+print(as.data.frame(comp_estres_alt), row.names = FALSE)
+
 # Matriu de co-ocurrència (quants marquen cada parella)
 co <- crossprod(E)                     # diagonal = individuals; fora = parelles
 diag_co <- diag(co)
@@ -1806,7 +1829,9 @@ ggsave("sortides/estres_coocurrencia_heatmap.png", g_co, width = 9, height = 7, 
 
 write_xlsx(list("Frequencia_factors" = freq_factors,
                 "Coocurrencies_parelles" = pares,
-                "Matriu_coocurrencia" = as.data.frame(co) %>% rownames_to_column("factor")),
+                "Matriu_coocurrencia" = as.data.frame(co) %>% rownames_to_column("factor"),
+                "Nestres_vs_constructes" = cor_nestres,
+                "Sobrecarregats_vs_resta" = comp_estres_alt),
            "sortides/resultats_coocurrencia_estres.xlsx")
 
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
