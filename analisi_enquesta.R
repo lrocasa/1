@@ -29,8 +29,43 @@
 #
 #  ÍTEMS INVERTITS (negatiu -> alt = pitjor): 6, 13, 19, 27
 #
-#  COM USAR-LO: ajusta la ruta de 'fitxer' i executa de dalt a baix
-#  (Ctrl+Alt+R a RStudio). Els resultats es desen a la carpeta 'sortides/'.
+#  COM USAR-LO: ajusta la ruta de 'fitxer' (secció 1) i executa de dalt a baix
+#  (a RStudio: Ctrl+Alt+R, o botó 'Source'). Els paquets s'instal·len sols.
+#  Els resultats (taules .xlsx i gràfics .png) es desen a la carpeta 'sortides/'.
+#
+#  PREGUNTES DE RECERCA
+#  --------------------
+#  P1/P2 · Hi ha diferències en coherència/energia segons rol, nivell jeràrquic
+#          i context? Quins constrenyiments (estrès) predominen? (PARTs B, I, R)
+#  P3   · Quina relació hi ha entre coherència i energia? (PARTs L, O, P)
+#
+#  ÍNDEX (què fa cada bloc)
+#  ------------------------
+#  Seccions 0–14 : preparació de dades, neteja, constructes, fiabilitat (alpha),
+#                  omega (8b), descriptius i primers segmentadors.
+#  PART B : segmentadors (paramètric) — tests + mida d'efecte + correcció.
+#  PART C : ítems de control 23-24-25 (validesa + models de control).
+#  PART D : anàlisi factorial exploratòria (AFE) del Bloc 1.
+#  PART E : dimensions EMPÍRIQUES del Bloc 1 (fiab. + segm. + control).
+#  PART F : AFE conjunta Bloc 2+3 i factors empírics energia/recuperació+propòsit.
+#  PART G : rols múltiples (Cargo+Subcargo) + n_rols.
+#  PART H : hipòtesi de participació en projectes estratègics FECC (incl. GdE).
+#  PART I : comparació de subgrups NO paramètrica (rol, nivell, territori) [P1/P2].
+#  PART J : etapes/àmbits (docents) + correlacions entre constructes.
+#  PART L : correlació de les 3 dimensions principals amb IC bootstrap [P3].
+#  PART M : acord i variància intra-escola (ICC i consens rwg).
+#  PART N : anàlisi a NIVELL D'ESCOLA (mitjanes + segmentadors + estrès + FECC).
+#  PART O : regressió múltiple (prova directa de P3) + supòsits + errors robustos.
+#  PART P : mediació (direccionalitat coherència<->propòsit sobre l'energia).
+#  PART Q : anàlisi de clústers (perfils per a interpretació i mostreig).
+#  PART R : freqüències i co-ocurrències dels factors d'estrès (ítem 22) [P2].
+#  PART S : gràfics addicionals per a l'informe.
+#  (No hi ha PART K: era una matriu 'tot contra tot' que es va descartar per
+#   redundant; les comparacions es fan de forma dirigida a les PARTs B/I/N.)
+#
+#  NOTA DE CAUTELA GENERAL: n=143, molts subgrups petits i disseny transversal
+#  (observacional). Els resultats són EXPLORATORIS; s'informa de la mida de
+#  l'efecte i es fa correcció per comparacions múltiples. No s'infereix causalitat.
 # ============================================================================
 
 # ---- 0. Paquets -----------------------------------------------------------
