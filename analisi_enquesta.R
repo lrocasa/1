@@ -115,7 +115,10 @@ correccions_xarxa <- c(
   "FEDAC - CANET"        = "Fundació Educativa Dominiques de l'Anunciata Pare Coll - FEDAC",
   "FEDAC - SANT FELIU"   = "Fundació Educativa Dominiques de l'Anunciata Pare Coll - FEDAC",
   "VEDRUNA MALGRAT DE MAR" = "Fundació Vedruna Catalunya Educació",
-  "VEDRUNA TARREGA"      = "Fundació Vedruna Catalunya Educació")
+  "VEDRUNA TARREGA"      = "Fundació Vedruna Catalunya Educació",
+  "NADIS - SAGRAT COR SARRIA"       = "Congregació del Sagrat Cor (RSCJ)",
+  "PADRE DAMIAN SAGRADOS CORAZONES" = "Congregació dels Sagrats Cors (SS.CC.)",
+  "REGINA CARMELI"                  = "Germanes Carmelites de Sant Josep")
 .k_esc <- norm_esc(dades$Escola)
 for (.nm in names(correccions_xarxa))
   dades$Denominacio[.k_esc == .nm & den_buit(dades$Denominacio)] <- correccions_xarxa[[.nm]]
@@ -1335,10 +1338,74 @@ print(as.data.frame(corE_facetes), row.names = FALSE)
 write_xlsx(list("P3_3dimensions" = cor3_teoric, "P3_energia_facetes" = corE_facetes),
            "sortides/resultats_correlacio_P3.xlsx")
 
+# ===========================================================================
+#  PART M · ACORD I VARIÀNCIA A NIVELL D'ESCOLA
+#  Explora si les persones d'una mateixa escola "comparteixen resultats":
+#   - ICC(1): quanta variància d'un constructe és ENTRE escoles (fenomen d'escola)
+#   - ICC(2): fiabilitat de la MITJANA de l'escola
+#   - rwg(j): consens/acord dels companys dins de cada escola
+#  Només escoles amb >=2 respostes. Anàlisi DESCRIPTIVA/EXPLORATÒRIA: amb poques
+#  escoles i mides petites NO es fan models multinivell inferencials.
+# ===========================================================================
+dades <- dades %>% mutate(escola_key = norm_esc(Escola))
+esc_valides <- dades %>% filter(!den_buit(Escola)) %>%
+  count(escola_key) %>% filter(n >= 2) %>% pull(escola_key)
+dd_esc <- dades %>% filter(escola_key %in% esc_valides)
+cat(sprintf("\n===== ACORD INTRA-ESCOLA (%d escoles amb >=2 respostes, %d respostes) =====\n",
+            length(esc_valides), nrow(dd_esc)))
+
+constr_esc <- c(constructes_clau, constructes_emp)
+
+# ICC(1) i ICC(2) via ANOVA d'un factor (constructe ~ escola)
+icc_fn <- function(df, cc) {
+  d <- df %>% transmute(g = escola_key, y = .data[[cc]]) %>% drop_na()
+  k <- dplyr::n_distinct(d$g); N <- nrow(d)
+  if (k < 2 || N <= k) return(c(ICC1 = NA_real_, ICC2 = NA_real_))
+  grand <- mean(d$y); grp <- split(d$y, d$g)
+  nj <- sapply(grp, length); mj <- sapply(grp, mean)
+  MSB <- sum(nj * (mj - grand)^2) / (k - 1)
+  MSW <- sum(sapply(grp, function(y) sum((y - mean(y))^2))) / (N - k)
+  n0  <- (N - sum(nj^2)/N) / (k - 1)
+  c(ICC1 = round((MSB - MSW)/(MSB + (n0 - 1)*MSW), 3),
+    ICC2 = round((MSB - MSW)/MSB, 3))
+}
+taula_icc <- map_dfr(constr_esc, function(cc) {
+  v <- icc_fn(dd_esc, cc); tibble(construct = cc, ICC1 = v["ICC1"], ICC2 = v["ICC2"])
+})
+cat("\n--- ICC (quanta variància és ENTRE escoles) ---\n")
+print(as.data.frame(taula_icc), row.names = FALSE)
+
+# rwg(j): consens dins de cada escola per a les escales principals
+sigma_eu <- (7^2 - 1) / 12    # variància nul·la uniforme (7 opcions) = 4
+rwg_one <- function(mat) {
+  mat <- as.matrix(mat)
+  sbar <- mean(apply(mat, 2, var, na.rm = TRUE), na.rm = TRUE)
+  J <- ncol(mat); num <- J * (1 - sbar/sigma_eu)
+  max(num / (num + sbar/sigma_eu), 0)
+}
+escales_rwg <- list(Funcionament = items_bloc1,
+                    Energia = c("en18","en19","en20"),
+                    Proposit = c("prop28","prop29","prop31"))
+rwg_res <- map_dfr(names(escales_rwg), function(nm) {
+  its <- escales_rwg[[nm]]
+  sp  <- split(as.data.frame(dd_esc)[, its, drop = FALSE], dd_esc$escola_key)
+  sp  <- sp[sapply(sp, nrow) >= 2]
+  vals <- sapply(sp, rwg_one)
+  tibble(escala = nm, escoles = length(vals),
+         rwg_mediana = round(median(vals, na.rm = TRUE), 2),
+         pct_acord_alt = round(100 * mean(vals >= 0.70, na.rm = TRUE), 0))
+})
+cat("\n--- Consens intra-escola rwg(j) (>=0,70 = acord acceptable) ---\n")
+print(as.data.frame(rwg_res), row.names = FALSE)
+
+write_xlsx(list("ICC_escola" = taula_icc, "rwg_consens" = rwg_res),
+           "sortides/resultats_acord_escola.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
+    " - resultats_acord_escola.xlsx (ICC i consens intra-escola)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
     " - resultats_control_empiric.xlsx (ítems 23-24-25 vs constructes EMPÍRICS)\n",
     " - resultats_afe.xlsx (AFE del Bloc 1)\n",
