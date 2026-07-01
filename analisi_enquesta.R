@@ -1617,12 +1617,98 @@ cat("Interpretació: 'mediació=SÍ' vol dir que l'efecte indirecte és signific
     "amb dades transversals indica compatibilitat amb el mecanisme, NO causalitat.\n")
 write_xlsx(list("Mediacio" = taula_mediacio), "sortides/resultats_mediacio.xlsx")
 
+# ===========================================================================
+#  PART Q · ANÀLISI DE CLÚSTERS (perfils de coherència, energia i propòsit)
+#  Identifica perfils de participants amb patrons similars, per enriquir la
+#  interpretació i ORIENTAR LA SELECCIÓ per a entrevistes (perfils contrastats
+#  i casos extrems). k-means (validat amb jeràrquic Ward).
+# ===========================================================================
+library(cluster)
+vars_clu <- c("funcionament","energia","recuperacio","proposit")
+dclu <- dades %>% transmute(
+  id_persona,
+  Funcionament = idx_funcionament_xarxa, Energia = idx_energia,
+  Recuperacio = idx_recuperacio, Proposit = idx_alineament_proposit,
+  Cargo_grup, NivellJerarquic, Xarxa, particip_FECC)
+Xc <- scale(as.matrix(dclu[, c("Funcionament","Energia","Recuperacio","Proposit")]))
+
+# --- Nombre de clústers: silueta mitjana per k = 2..6 ----------------------
+set.seed(2024)
+sil_k <- sapply(2:6, function(k) {
+  km <- kmeans(Xc, centers = k, nstart = 25)
+  mean(cluster::silhouette(km$cluster, dist(Xc))[, 3]) })
+names(sil_k) <- 2:6
+cat("\n===== CLÚSTERS · silueta mitjana per k =====\n"); print(round(sil_k, 3))
+k_opt <- as.integer(names(sil_k)[which.max(sil_k)])
+cat("k triat (màxima silueta):", k_opt, "\n")
+
+# --- k-means final ---------------------------------------------------------
+set.seed(2024)
+km <- kmeans(Xc, centers = k_opt, nstart = 50)
+dclu$cluster <- factor(km$cluster)
+
+# --- Validació: jeràrquic Ward i concordança amb k-means -------------------
+hc <- hclust(dist(Xc), method = "ward.D2")
+dclu$cluster_hc <- factor(cutree(hc, k = k_opt))
+cat("\nConcordança k-means vs jeràrquic (taula creuada):\n")
+print(table(kmeans = dclu$cluster, jerarquic = dclu$cluster_hc))
+
+# --- Perfil de cada clúster (mitjanes en escala original 1-7) --------------
+perfil <- dclu %>% group_by(cluster) %>%
+  summarise(n = n(),
+            across(c(Funcionament, Energia, Recuperacio, Proposit),
+                   ~ round(mean(.x, na.rm = TRUE), 2)), .groups = "drop")
+cat("\n===== PERFIL DELS CLÚSTERS (mitjanes 1-7) =====\n")
+print(as.data.frame(perfil), row.names = FALSE)
+
+# --- Composició dels clústers per segmentador (descriptiu) -----------------
+cat("\nClúster x Nivell jeràrquic:\n"); print(table(dclu$cluster, dclu$NivellJerarquic))
+cat("\nClúster x Participació FECC:\n"); print(table(dclu$cluster, dclu$particip_FECC))
+
+# --- Selecció per a ENTREVISTES -------------------------------------------
+# (a) casos REPRESENTATIUS: els més propers al centroide de cada clúster
+centres <- km$centers[km$cluster, , drop = FALSE]
+dclu$dist_centroide <- round(sqrt(rowSums((Xc - centres)^2)), 2)
+representatius <- dclu %>% group_by(cluster) %>%
+  slice_min(dist_centroide, n = 2, with_ties = FALSE) %>%
+  select(cluster, id_persona, Funcionament, Energia, Recuperacio, Proposit,
+         Cargo_grup, NivellJerarquic, dist_centroide) %>% ungroup()
+cat("\n===== CASOS REPRESENTATIUS per clúster (per a entrevistes) =====\n")
+print(as.data.frame(representatius), row.names = FALSE)
+
+# (b) casos EXTREMS: perfils més marcats (distància al centre global)
+dclu$dist_global <- round(sqrt(rowSums(Xc^2)), 2)
+extrems <- dclu %>% slice_max(dist_global, n = 6) %>%
+  select(id_persona, cluster, Funcionament, Energia, Recuperacio, Proposit,
+         Cargo_grup, dist_global)
+cat("\n===== CASOS EXTREMS (perfils més marcats) =====\n")
+print(as.data.frame(extrems), row.names = FALSE)
+
+# --- Gràfics ---------------------------------------------------------------
+tryCatch({
+  ggsave("sortides/clusters_silueta.png",
+         factoextra::fviz_nbclust(Xc, kmeans, method = "silhouette"),
+         width = 7, height = 5, dpi = 120)
+  ggsave("sortides/clusters_mapa.png",
+         factoextra::fviz_cluster(km, data = Xc, geom = "point", ellipse.type = "convex") +
+           ggplot2::labs(title = "Clústers de perfils (coherència, energia, propòsit)"),
+         width = 8, height = 6, dpi = 120)
+}, error = function(e) cat("(gràfics de clúster omesos:", conditionMessage(e), ")\n"))
+
+write_xlsx(list("Perfil_clusters" = perfil,
+                "Casos_representatius" = representatius,
+                "Casos_extrems" = extrems,
+                "Assignacio" = dclu %>% select(id_persona, cluster, Funcionament,
+                               Energia, Recuperacio, Proposit, dist_centroide)),
+           "sortides/resultats_clusters.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
     " - resultats_regressio.xlsx (regressió múltiple + supòsits + errors robustos)\n",
     " - resultats_mediacio.xlsx (mediació coherència/propòsit -> energia)\n",
+    " - resultats_clusters.xlsx (perfils + casos per a entrevistes)\n",
     " - resultats_acord_escola.xlsx (ICC i consens intra-escola)\n",
     " - resultats_nivell_escola.xlsx (constructes agregats per escola + segmentadors)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
