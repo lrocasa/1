@@ -1700,14 +1700,17 @@ fer_clusters <- function(cols, labels, nom, coh_vec, en_vec) {
     ggsave(paste0("sortides/clusters_", nom, "_perfils_k5.png"),
            graf_perfil(perfil5, "cluster5", paste0("Perfils de clúster (k=5) · versió ", nom)),
            width = 8.5, height = 5, dpi = 120)
-    # gràfic 3D (3 constructes si n'hi ha 3; si no, 3 primeres components)
+    # gràfic 3D (3 constructes si n'hi ha 3; si no, 3 primeres components) per k=3 i k=5
     if (ncol(M) == 3) { P3 <- as.matrix(M); axl <- labels } else {
       pc <- prcomp(Xc); P3 <- pc$x[, 1:3]; axl <- paste0("Dim", 1:3) }
-    png(paste0("sortides/clusters_", nom, "_3D_k3.png"), width = 850, height = 750, res = 110)
-    scatterplot3d::scatterplot3d(P3, color = as.integer(base$cluster3), pch = 19,
-      xlab = axl[1], ylab = axl[2], zlab = axl[3],
-      main = paste0("Gràfic 3D · versió ", nom, " (color = clúster k=3)"))
-    dev.off()
+    for (kk in c(3, 5)) {
+      cl <- if (kk == 3) base$cluster3 else base$cluster5
+      png(paste0("sortides/clusters_", nom, "_3D_k", kk, ".png"), width = 850, height = 750, res = 110)
+      scatterplot3d::scatterplot3d(P3, color = as.integer(cl), pch = 19,
+        xlab = axl[1], ylab = axl[2], zlab = axl[3],
+        main = paste0("Gràfic 3D · versió ", nom, " (color = clúster k=", kk, ")"))
+      dev.off()
+    }
   }, error = function(e) cat("(gràfics de clúster omesos:", conditionMessage(e), ")\n"))
   write_xlsx(list(Perfil_k2 = perfil2, Perfil_k3 = perfil3, Perfil_k5 = perfil5,
                   Representatius = repr, Extrems = extr, Mixt_coh_sense_energia = mixt1,
