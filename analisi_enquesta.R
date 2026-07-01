@@ -1639,17 +1639,21 @@ fer_clusters <- function(cols, labels, nom, coh_vec, en_vec) {
   k_opt <- (2:6)[which.max(sil)]
   gap <- tryCatch(cluster::clusGap(Xc, kmeans, K.max = 6, B = 50, nstart = 25)$Tab[,"gap"],
                   error = function(e) rep(NA_real_, 6))
-  set.seed(2024); km2 <- kmeans(Xc, k_opt, nstart = 50); km3 <- kmeans(Xc, 3, nstart = 50)
+  set.seed(2024); km2 <- kmeans(Xc, k_opt, nstart = 50)
+  km3 <- kmeans(Xc, 3, nstart = 50); km5 <- kmeans(Xc, 5, nstart = 50)
   hc <- hclust(dist(Xc), "ward.D2")
   base <- tibble(id_persona = ids) %>% bind_cols(as_tibble(M)) %>%
     mutate(cluster = factor(km2$cluster), cluster3 = factor(km3$cluster),
-           cluster_hc = factor(cutree(hc, k_opt)),
+           cluster5 = factor(km5$cluster), cluster_hc = factor(cutree(hc, k_opt)),
            z_coh = as.numeric(scale(coh_vec[ok])), z_en = as.numeric(scale(en_vec[ok])),
            discordanca = round(z_coh - z_en, 2)) %>% bind_cols(seg)
   perfil2 <- base %>% group_by(cluster) %>%
     summarise(n = n(), across(all_of(labels), ~ round(mean(.x),2)), .groups = "drop")
   perfil3 <- base %>% group_by(cluster3) %>%
     summarise(n = n(), across(all_of(labels), ~ round(mean(.x),2)), .groups = "drop")
+  perfil5 <- base %>% group_by(cluster5) %>%
+    summarise(n = n(), across(all_of(labels), ~ round(mean(.x),2)), .groups = "drop") %>%
+    arrange(across(all_of(labels[length(labels)])))   # ordenat pel darrer (propòsit)
   cen <- km2$centers[km2$cluster, , drop = FALSE]
   base$dist_c <- round(sqrt(rowSums((Xc - cen)^2)), 2)
   base$dist_g <- round(sqrt(rowSums(Xc^2)), 2)
@@ -1662,10 +1666,23 @@ fer_clusters <- function(cols, labels, nom, coh_vec, en_vec) {
       "| gap(k1)=", round(gap[1],2), "\n")
   cat("Perfil k=", k_opt, ":\n", sep=""); print(as.data.frame(perfil2), row.names = FALSE)
   cat("Perfil k=3:\n"); print(as.data.frame(perfil3), row.names = FALSE)
+  cat("Perfil k=5:\n"); print(as.data.frame(perfil5), row.names = FALSE)
   cat(sprintf("Casos mixtos: alta coh+baixa energia=%d | baixa coh+alta energia=%d\n",
               nrow(mixt1), nrow(mixt2)))
-  write_xlsx(list(Perfil_k2 = perfil2, Perfil_k3 = perfil3, Representatius = repr,
-                  Extrems = extr, Mixt_coh_sense_energia = mixt1,
+  # --- Gràfics: dispersió (mapa PCA) i dendrograma (jeràrquic) --------------
+  tryCatch({
+    ggsave(paste0("sortides/clusters_", nom, "_mapa_k5.png"),
+           factoextra::fviz_cluster(list(data = Xc, cluster = km5$cluster),
+             geom = "point", ellipse.type = "convex", palette = "Set2") +
+             ggplot2::labs(title = paste0("Distribució dels punts per clúster (k=5) · versió ", nom)),
+           width = 8, height = 6, dpi = 120)
+    ggsave(paste0("sortides/clusters_", nom, "_dendrograma.png"),
+           factoextra::fviz_dend(hc, k = 5, cex = 0.4, show_labels = FALSE, palette = "Set2") +
+             ggplot2::labs(title = paste0("Dendrograma jeràrquic (Ward, k=5) · versió ", nom)),
+           width = 9, height = 6, dpi = 120)
+  }, error = function(e) cat("(gràfics de clúster omesos:", conditionMessage(e), ")\n"))
+  write_xlsx(list(Perfil_k2 = perfil2, Perfil_k3 = perfil3, Perfil_k5 = perfil5,
+                  Representatius = repr, Extrems = extr, Mixt_coh_sense_energia = mixt1,
                   Mixt_energia_sense_coh = mixt2, Assignacio = base),
              paste0("sortides/resultats_clusters_", nom, ".xlsx"))
   invisible(base)
