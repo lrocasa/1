@@ -56,7 +56,9 @@ L'alineament de propòsit personal–professional és el punt **més fort**; l'e
 |---|---|---|---|
 | **EF3 · Coherència de propòsit i prioritats** | 1, 2, 3, 4, 5 | **0,85** | Bona ✅ |
 | **EF2 · Funcionament de l'equip** (feedback, adaptació, reflexió) | 9, 10, 11, 12, 15 | **0,79** | Acceptable ✅ |
-| **EF1 · Mediació, lideratge i confiança en la xarxa** | 7, 8, 13, 14, 16, 17 | **0,77** | Acceptable ✅ |
+| **EF1 · Comunicació, connexió i confiança en la xarxa** | 7, 8, 14, 16, 17 | **0,83** | Bona ✅ |
+
+*L'ítem 13 s'ha exclòs d'EF1 (vegeu §4.1); en excloure'l, la fiabilitat d'EF1 puja de 0,77 a 0,83.*
 
 **Bloc 2 + 3 → 2 factors empírics:**
 | Factor empíric | Ítems | ω | Valoració |
@@ -87,9 +89,11 @@ L'alineament de propòsit personal–professional és el punt **més fort**; l'e
 |---|---|---|
 | EF3 | D1 + D2 | Coherència de propòsit i contextualització |
 | EF2 | D4 + D5 + D7 | Vida i funcionament de l'equip propi |
-| EF1 | D3 + D6 + D6.1 + D8 (+16) | Mediació, lideratge i confiança en el sistema |
+| EF1 | D3 + D6.1 + D8 (+16) | Comunicació, connexió i confiança en el sistema |
 
-- **L'ítem 6** ("missatges contradictoris del sistema") no carrega en cap factor (< 0,30) i queda **fora dels índexs empírics**, coherent amb la seva debilitat detectada a la fiabilitat. (Es manté als constructes teòrics.)
+- **Dos ítems queden fora dels índexs empírics** (es mantenen als constructes teòrics):
+  - **Ítem 6** ("missatges contradictoris del sistema"): càrrega < 0,30 en tots els factors.
+  - **Ítem 13** ("massa responsabilitats en les mateixes persones"): tot i parlar d'equip, empíricament **no carrega a l'equip** (0,21) sinó al factor de sistema amb **signe negatiu i contradictori** (−0,60) i amb càrrega repartida. En excloure'l, EF1 millora (ω 0,77 → 0,83). Tots dos són ítems redactats en negatiu.
 
 ### 4.2 Bloc 2 + 3 (validesa discriminant)
 - KMO = 0,72; l'anàlisi paral·lela suggereix **2 factors**.
@@ -118,18 +122,18 @@ Correlacions de Spearman entre les tres dimensions principals (IC 95% bootstrap)
 | **Propòsit** | 0,38 | 0,43 | 0,30 | 1,00 |
 
 **Quina faceta de coherència mou l'energia** (factors empírics del Bloc 1 ↔ energia):
-- **EF2 · Equip propi**: ρ = 0,33 [0,18 – 0,48] ← la més forta
-- EF1 · Sistema/xarxa: ρ = 0,24 [0,05 – 0,41]
+- **EF2 · Equip propi**: ρ = 0,33 [0,18 – 0,48]
+- **EF1 · Sistema/xarxa**: ρ = 0,32 [0,16 – 0,47]
 - EF3 · Coherència de propòsit: ρ = 0,22 [0,07 – 0,38] ← la més feble
 
-**Destacat (P3):** hi ha una **associació positiva moderada entre coherència i energia**. El vincle més fort és **propòsit ↔ energia**. Quan es descompon la coherència de xarxa, l'energia es lliga sobretot a la **coherència de l'equip propi** (allò proper i quotidià), no tant a la coherència de propòsit institucional abstracte. La **recuperació** és força independent de la coherència (ρ 0,05–0,16).
+**Destacat (P3):** hi ha una **associació positiva moderada entre coherència i energia**. El vincle més fort és **propòsit ↔ energia**. Quan es descompon la coherència de xarxa, l'energia es lliga sobretot a les facetes **operatives i properes** —el funcionament de l'**equip propi** i la comunicació/confiança en el **sistema** (ρ ≈ 0,32–0,33)—, i menys a la coherència de propòsit institucional abstracte (ρ = 0,22). La **recuperació** és força independent de la coherència (ρ 0,05–0,16).
 
 ---
 
 ## 6. Diferències per subgrups — **P1 / P2**
 
 ### 6.1 Nivell jeràrquic
-Kruskal-Wallis sobre els constructes: l'única diferència que **supera la correcció** és en el factor empíric **EF1 (mediació/sistema)**: H = 13,4, **p_ajustada = 0,035**, ε² = 0,08 (efecte mitjà). El post-hoc de Dunn mostra que el grup **"Comunitat i altres agents"** (entitats FECC, Comité d'ètica) es diferencia significativament del **Nucli operatiu** (p = 0,003) i de la **Governança intermèdia** (p = 0,005). La resta de constructes són homogenis entre nivells.
+Kruskal-Wallis sobre els constructes: l'única diferència que **supera la correcció** és en el factor empíric **EF1 (comunicació/sistema)**: H = 13,7, **p_ajustada = 0,030**, ε² = 0,08 (efecte mitjà). El post-hoc de Dunn mostra que el grup **"Comunitat i altres agents"** (entitats FECC, Comité d'ètica) es diferencia significativament del **Nucli operatiu** (p = 0,003) i de la **Governança intermèdia** (p = 0,005). La resta de constructes són homogenis entre nivells.
 
 ### 6.2 Rol (multi-pertinença; Mann-Whitney)
 | Rol (n) | Troballa | p |
