@@ -1670,6 +1670,16 @@ fer_clusters <- function(cols, labels, nom, coh_vec, en_vec) {
   cat(sprintf("Casos mixtos: alta coh+baixa energia=%d | baixa coh+alta energia=%d\n",
               nrow(mixt1), nrow(mixt2)))
   # --- Gràfics: dispersió (mapa PCA) i dendrograma (jeràrquic) --------------
+  graf_perfil <- function(perf, clcol, titol) {
+    perf %>% tidyr::pivot_longer(all_of(labels), names_to = "constructe", values_to = "m") %>%
+      mutate(constructe = factor(constructe, levels = labels), grp = factor(.data[[clcol]])) %>%
+      ggplot2::ggplot(ggplot2::aes(constructe, m, group = grp, color = grp)) +
+      ggplot2::geom_line(linewidth = 1) + ggplot2::geom_point(size = 2) +
+      ggplot2::coord_cartesian(ylim = c(1, 7)) +
+      ggplot2::labs(title = titol, x = NULL, y = "Mitjana (1-7)", color = "Clúster") +
+      ggplot2::theme_minimal() +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 25, hjust = 1))
+  }
   tryCatch({
     for (kk in c(3, 5)) {
       cl <- if (kk == 3) km3$cluster else km5$cluster
@@ -1683,6 +1693,21 @@ fer_clusters <- function(cols, labels, nom, coh_vec, en_vec) {
                ggplot2::labs(title = paste0("Dendrograma jeràrquic (Ward, k=", kk, ") · versió ", nom)),
              width = 9, height = 6, dpi = 120)
     }
+    # gràfic de PERFILS (línies de mitjanes per clúster) — més interpretable
+    ggsave(paste0("sortides/clusters_", nom, "_perfils_k3.png"),
+           graf_perfil(perfil3, "cluster3", paste0("Perfils de clúster (k=3) · versió ", nom)),
+           width = 8, height = 5, dpi = 120)
+    ggsave(paste0("sortides/clusters_", nom, "_perfils_k5.png"),
+           graf_perfil(perfil5, "cluster5", paste0("Perfils de clúster (k=5) · versió ", nom)),
+           width = 8.5, height = 5, dpi = 120)
+    # gràfic 3D (3 constructes si n'hi ha 3; si no, 3 primeres components)
+    if (ncol(M) == 3) { P3 <- as.matrix(M); axl <- labels } else {
+      pc <- prcomp(Xc); P3 <- pc$x[, 1:3]; axl <- paste0("Dim", 1:3) }
+    png(paste0("sortides/clusters_", nom, "_3D_k3.png"), width = 850, height = 750, res = 110)
+    scatterplot3d::scatterplot3d(P3, color = as.integer(base$cluster3), pch = 19,
+      xlab = axl[1], ylab = axl[2], zlab = axl[3],
+      main = paste0("Gràfic 3D · versió ", nom, " (color = clúster k=3)"))
+    dev.off()
   }, error = function(e) cat("(gràfics de clúster omesos:", conditionMessage(e), ")\n"))
   write_xlsx(list(Perfil_k2 = perfil2, Perfil_k3 = perfil3, Perfil_k5 = perfil5,
                   Representatius = repr, Extrems = extr, Mixt_coh_sense_energia = mixt1,
