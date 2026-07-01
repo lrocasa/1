@@ -47,7 +47,7 @@
 #  PART C : ítems de control 23-24-25 (validesa + models de control).
 #  PART D : anàlisi factorial exploratòria (AFE) del Bloc 1.
 #  PART E : dimensions EMPÍRIQUES del Bloc 1 (fiab. + segm. + control).
-#  PART F : AFE conjunta Bloc 2+3 i factors empírics energia/recuperació+propòsit.
+#  PART F : AFE conjunta Bloc 2+3 i dimensions empíriques energia/recuperació+propòsit.
 #  PART G : rols múltiples (Cargo+Subcargo) + n_rols.
 #  PART H : hipòtesi de participació en projectes estratègics FECC (incl. GdE).
 #  PART I : comparació de subgrups NO paramètrica (rol, nivell, territori) [P1/P2].
@@ -58,7 +58,7 @@
 #  PART O : regressió múltiple (prova directa de P3) + supòsits + errors robustos.
 #  PART P : mediació (direccionalitat coherència<->propòsit sobre l'energia).
 #  PART Q : anàlisi de clústers (perfils per a interpretació i mostreig).
-#  PART R : freqüències i co-ocurrències dels factors d'estrès (ítem 22) [P2].
+#  PART R : freqüències i co-ocurrències de les dimensions d'estrès (ítem 22) [P2].
 #  PART S : gràfics addicionals per a l'informe.
 #  (No hi ha PART K: era una matriu 'tot contra tot' que es va descartar per
 #   redundant; les comparacions es fan de forma dirigida a les PARTs B/I/N.)
@@ -864,13 +864,13 @@ write_xlsx(c(list("Resum_solucions" = afe_resum),
 #  Es deriven AUTOMÀTICAMENT de la solució de 3 factors i es repeteix tota
 #  l'anàlisi (fiabilitat + segmentadors + controls) EN PARAL·LEL a la teòrica
 #  (les dimensions teòriques es mantenen intactes).
-#  EF1/EF2/EF3 = factors empírics (MR de l'AFE). Mira 'assig_emp' per veure
+#  EF1/EF2/EF3 = dimensions empíriques (MR de l'AFE). Mira 'assig_emp' per veure
 #  quins ítems conté cada factor i posar-hi una etiqueta de contingut.
 # ===========================================================================
 fa3 <- afe_models[["F3"]]
 L3  <- unclass(fa3$loadings)
 CARREGA_MIN <- 0.30
-# Ítems problemàtics exclosos dels factors empírics (contingut incoherent amb la
+# Ítems problemàtics exclosos dels dimensions empíriques (contingut incoherent amb la
 # ubicació empírica i/o càrrega negativa contradictòria). Es mantenen als teòrics.
 #  - coh06_r: ja cau per sota del llindar
 #  - coh13_r: càrrega -0,60 a EF1 (signe contradictori) i parla d'equip, no de sistema
@@ -902,26 +902,26 @@ for (f in names(emp_items)) {
 }
 constructes_emp <- paste0("idx_", names(emp_items))
 
-# ---- E1. Fiabilitat (omega) dels factors empírics -------------------------
+# ---- E1. Fiabilitat (omega) dels dimensions empíriques -------------------------
 taula_fiab_emp <- map_dfr(names(emp_items),
   ~ fiab_omega(dades, emp_items[[.x]], paste0("Empíric ", .x))) %>%
   mutate(valoracio = interpreta(omega))
-cat("\n--- Fiabilitat (omega) dels factors empírics ---\n")
+cat("\n--- Fiabilitat (omega) dels dimensions empíriques ---\n")
 print(as.data.frame(taula_fiab_emp), row.names = FALSE)
 
-# ---- E2. Segmentadors sobre els factors empírics --------------------------
+# ---- E2. Segmentadors sobre els dimensions empíriques --------------------------
 taula_tests_emp <- map_dfr(segmentadors,
   ~ compara_segment(dades, .x, constructes = constructes_emp)) %>%
   mutate(across(c(p,p_noparam,p_adj,efecte,ef_ic_low,ef_ic_high), ~round(.x,4)))
-cat("\n--- Tests per segmentador (factors empírics) ---\n")
+cat("\n--- Tests per segmentador (dimensions empíriques) ---\n")
 print(as.data.frame(taula_tests_emp), row.names = FALSE)
 
-# ---- E3. Models de control sobre els factors empírics ---------------------
+# ---- E3. Models de control sobre els dimensions empíriques ---------------------
 models_control_emp <- map_dfr(constructes_emp, function(cc)
   map_dfr(segmentadors, ~ model_control(cc, .x))) %>%
   group_by(construct) %>% mutate(p_seg_adj = round(p.adjust(p_segment,"holm"),4)) %>%
   ungroup()
-cat("\n--- Models de control (factors empírics) ---\n")
+cat("\n--- Models de control (dimensions empíriques) ---\n")
 print(as.data.frame(models_control_emp), row.names = FALSE)
 
 # ---- E4. Exportar ---------------------------------------------------------
@@ -980,9 +980,9 @@ for (k in 2:3) {
   cat("Correlacions entre factors (Phi):\n"); print(round(fa_k$Phi,2))
 }
 
-# ---- F2. Operacionalitzar els factors empírics del Bloc 2+3 (solució 2 factors)
+# ---- F2. Operacionalitzar els dimensions empíriques del Bloc 2+3 (solució 2 factors)
 # L'AFE mostra que Energia i Recuperació NO es separen (van juntes) i que el
-# Propòsit és un factor a part. Construïm aquests factors empírics i hi repetim
+# Propòsit és un factor a part. Construïm aquests dimensions empíriques i hi repetim
 # fiabilitat + segmentadors + controls (com al Bloc 1), en paral·lel als teòrics.
 L2 <- unclass(afe23_models[["F2"]]$loadings)
 assig_b23 <- tibble(
@@ -1011,26 +1011,26 @@ for (f in names(emp_items_b23)) {
 }
 constructes_b23 <- paste0("idx_", names(emp_items_b23))
 
-# Fiabilitat (omega) dels factors empírics Bloc 2+3
+# Fiabilitat (omega) dels dimensions empíriques Bloc 2+3
 fiab_items_b23 <- lapply(emp_items_b23, function(its) vapply(its, col_de, character(1)))
 taula_fiab_b23 <- map_dfr(names(fiab_items_b23),
   ~ fiab_omega(dades, fiab_items_b23[[.x]], paste0("Empíric Bloc2+3 ", .x))) %>%
   mutate(valoracio = interpreta(omega))
-cat("\n--- Fiabilitat (omega) factors empírics Bloc 2+3 ---\n")
+cat("\n--- Fiabilitat (omega) dimensions empíriques Bloc 2+3 ---\n")
 print(as.data.frame(taula_fiab_b23), row.names = FALSE)
 
-# Segmentadors i models de control sobre els factors empírics Bloc 2+3
+# Segmentadors i models de control sobre els dimensions empíriques Bloc 2+3
 taula_tests_b23 <- map_dfr(segmentadors,
   ~ compara_segment(dades, .x, constructes = constructes_b23)) %>%
   mutate(across(c(p,p_noparam,p_adj,efecte,ef_ic_low,ef_ic_high), ~round(.x,4)))
-cat("\n--- Tests per segmentador (factors empírics Bloc 2+3) ---\n")
+cat("\n--- Tests per segmentador (dimensions empíriques Bloc 2+3) ---\n")
 print(as.data.frame(taula_tests_b23), row.names = FALSE)
 
 models_control_b23 <- map_dfr(constructes_b23, function(cc)
   map_dfr(segmentadors, ~ model_control(cc, .x))) %>%
   group_by(construct) %>% mutate(p_seg_adj = round(p.adjust(p_segment,"holm"),4)) %>%
   ungroup()
-cat("\n--- Models de control (factors empírics Bloc 2+3) ---\n")
+cat("\n--- Models de control (dimensions empíriques Bloc 2+3) ---\n")
 print(as.data.frame(models_control_b23), row.names = FALSE)
 
 write_xlsx(c(setNames(afe23_loadings, paste0("Carregues_", names(afe23_loadings))),
@@ -1042,7 +1042,7 @@ write_xlsx(c(setNames(afe23_loadings, paste0("Carregues_", names(afe23_loadings)
 
 # ---- PART C (versió EMPÍRICA): controls 23-24-25 vs constructes empírics ---
 # Completa l'estudi perquè la validesa dels controls també es faci sobre els
-# factors empírics (Bloc 1 + Bloc 2+3), no només sobre els teòrics (PART C).
+# dimensions empíriques (Bloc 1 + Bloc 2+3), no només sobre els teòrics (PART C).
 constr_emp_all <- c(constructes_emp, constructes_b23)
 cor_controls_emp <- map_dfr(controls_ord, function(v) {
   map_dfr(constr_emp_all, function(cc) {
@@ -1768,7 +1768,7 @@ clB <- fer_clusters(
   en_vec = dades$idx_energia_recup)
 
 # ===========================================================================
-#  PART R · FREQÜÈNCIES i CO-OCURRÈNCIES dels factors d'estrès (ítem 22)  [P2]
+#  PART R · FREQÜÈNCIES i CO-OCURRÈNCIES de les dimensions d'estrès (ítem 22)  [P2]
 #  Identifica els constrenyiments més prevalents i les seves combinacions més
 #  freqüents (parelles), amb la força d'associació (Jaccard i lift).
 # ===========================================================================
@@ -1786,7 +1786,7 @@ n_tot <- nrow(E)
 # Freqüència (prevalença) de cada factor
 freq_factors <- tibble(factor = colnames(E), n = colSums(E)) %>%
   mutate(pct = round(100 * n / n_tot, 1)) %>% arrange(desc(n))
-cat("\n===== FREQÜÈNCIA dels factors d'estrès (ítem 22) =====\n")
+cat("\n===== FREQÜÈNCIA de les dimensions d'estrès (ítem 22) =====\n")
 print(as.data.frame(freq_factors), row.names = FALSE)
 
 # --- Distribució del NOMBRE de factors per persona (rang i forma de la corba) ---

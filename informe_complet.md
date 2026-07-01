@@ -6,8 +6,9 @@
 
 > **Nomenclatura (per evitar confusions):**
 > - **Connexió de propòsit vital-personal** (*Connexió propòsit*) = BLOC 3, ítems 28, 29, 31 (ω=0,82). Alineació entre el propòsit personal i la feina.
-> - **EF3 · Coherència de propòsit** (*EF3*) = factor empíric del Bloc 1 (ítems 1–5): percepció que la xarxa comparteix una mateixa raó de ser i prioritats.
+> - **EF3 · Coherència de propòsit** (*EF3*) = dimensió empírica del Bloc 1 (ítems 1–5): percepció que la xarxa comparteix una mateixa raó de ser i prioritats.
 > Són coses **diferents**: la primera és personal-laboral; la segona, institucional.
+> - **Dimensions empíriques (EF1/EF2/EF3)** = les dimensions que revela l'anàlisi factorial (un "factor", matemàticament, és una dimensió latent). Es contraposen a les **dimensions teòriques** (D1–D8) definides a priori.
 >
 > Símbols: ✅ robust · ⚠️ cautela · ❌ hipòtesi no confirmada.
 
@@ -58,9 +59,9 @@ La fiabilitat indica si els ítems d'una escala mesuren de manera consistent el 
 | Recuperació | 2 | 0,63 | Feble ⚠️ |
 | Sensació d'energia | 3 | 0,57 | Insuficient ⚠️ |
 
-**Factors empírics del Bloc 1** (derivats de l'AFE, § 3): **EF3 · Coherència de propòsit** ω=0,85 · **EF1 · Comunicació/sistema** ω=0,83 · **EF2 · Coherència d'equip** ω=0,79. La versió empírica que fusiona energia+recuperació té ω=0,67.
+**Dimensions empíriques del Bloc 1** (derivats de l'AFE, § 3): **EF3 · Coherència de propòsit** ω=0,85 · **EF1 · Comunicació/sistema** ω=0,83 · **EF2 · Coherència d'equip** ω=0,79. La versió empírica que fusiona energia+recuperació té ω=0,67.
 
-**Lectura.** Els dos constructes centrals (funcionament i connexió de propòsit) són **fiables** i es poden interpretar amb garanties, igual que els tres factors empírics del Bloc 1. En canvi, el **bloc d'energia** és psicomètricament **feble**: l'escala de sensació d'energia (ω=0,57) està per sota del llindar acceptable, i la de recuperació (ω=0,63) hi frega. Això vol dir que **les conclusions sobre energia s'han de prendre amb cautela** i que aquest bloc és el primer candidat a millorar en una propera edició (§ 11). El fet que ω>α a la majoria d'escales indica que els ítems no pesen igual (no són tau-equivalents), cosa que justifica haver usat omega en comptes d'alfa.
+**Lectura.** Els dos constructes centrals (funcionament i connexió de propòsit) són **fiables** i es poden interpretar amb garanties, igual que les tres dimensions empíriques del Bloc 1. En canvi, el **bloc d'energia** és psicomètricament **feble**: l'escala de sensació d'energia (ω=0,57) està per sota del llindar acceptable, i la de recuperació (ω=0,63) hi frega. Això vol dir que **les conclusions sobre energia s'han de prendre amb cautela** i que aquest bloc és el primer candidat a millorar en una propera edició (§ 11). El fet que ω>α a la majoria d'escales indica que els ítems no pesen igual (no són tau-equivalents), cosa que justifica haver usat omega en comptes d'alfa.
 
 ---
 
@@ -68,9 +69,9 @@ La fiabilitat indica si els ítems d'una escala mesuren de manera consistent el 
 
 L'AFE examina **com co-varien els 17 ítems** per descobrir quantes dimensions de fons (factors) hi ha i quins ítems les componen. La matriu de partida és **policòrica** (adequada per a ítems ordinals).
 
-**Adequació:** KMO=0,75 (bo) i test de Bartlett p<0,001 → la matriu és factoritzable. L'**anàlisi paral·lela** (comparació amb dades a l'atzar) indica **3 factors**, no les 8–9 dimensions teòriques previstes.
+**Adequació:** KMO=0,75 (bo) i test de Bartlett p<0,001 → la matriu és factoritzable. L'**anàlisi paral·lela** (comparació amb dades a l'atzar) indica **3 dimensions**, no les 8–9 dimensions teòriques previstes.
 
-| Factor empíric | Ítems | Interpretació |
+| Dimensió empírica | Ítems | Interpretació |
 |---|---|---|
 | **EF3 · Coherència de propòsit** | 1, 2, 3, 4, 5 | Compartir la raó de ser i les prioritats; contextualització |
 | **EF2 · Coherència d'equip** | 9, 10, 11, 12, 15 | Feedback, adaptació i reflexió dins de l'equip propi |
@@ -78,7 +79,7 @@ L'AFE examina **com co-varien els 17 ítems** per descobrir quantes dimensions d
 
 ![Scree i anàlisi paral·lela](figures/afe_scree.png)
 
-**Lectura.** Les 8–9 dimensions teòriques fines **es col·lapsen en 3 grans factors**: allò de *propòsit compartit*, allò de *l'equip proper* i allò del *sistema/xarxa*. Aquesta és una troballa rellevant: empíricament, la coherència es viu en aquests tres plans, no en nou matisos separats. Els **ítems 6 i 13 queden fora** dels factors (baix ajust); es mantenen als constructes teòrics però no als índexs empírics (§ 11 explica per què i com millorar-los).
+**Lectura.** Les 8–9 dimensions teòriques fines **es col·lapsen en 3 grans dimensions**: allò de *propòsit compartit*, allò de *l'equip proper* i allò del *sistema/xarxa*. Aquesta és una troballa rellevant: empíricament, la coherència es viu en aquests tres plans, no en nou matisos separats. Els **ítems 6 i 13 queden fora** dels factors (baix ajust); es mantenen als constructes teòrics però no als índexs empírics (§ 11 explica per què i com millorar-los).
 
 L'**AFE conjunta del Bloc 2+3** mostra, a més, que **energia i recuperació no es diferencien** empíricament (formen un sol factor), mentre que la **connexió de propòsit sí** que és un factor distint. Per això, en les anàlisis empíriques, energia i recuperació es tracten fusionades.
 
