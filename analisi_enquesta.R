@@ -1834,6 +1834,61 @@ write_xlsx(list("Frequencia_factors" = freq_factors,
                 "Sobrecarregats_vs_resta" = comp_estres_alt),
            "sortides/resultats_coocurrencia_estres.xlsx")
 
+# ===========================================================================
+#  PART S · GRÀFICS ADDICIONALS PER A L'INFORME
+#  Reuneix visualitzacions clau que faciliten la redacció de l'informe:
+#  correlacions entre constructes, relació P3 (coherència-energia), pesos de la
+#  regressió i variació de l'energia entre escoles (ICC).
+# ===========================================================================
+# 1) Heatmap de correlacions entre constructes (Spearman)
+cc_mat <- cor(dades[, c(constructes_clau, constructes_emp)],
+              use = "pairwise.complete.obs", method = "spearman")
+cc_df <- as.data.frame(as.table(cc_mat)); names(cc_df) <- c("v1","v2","r")
+g_corr <- ggplot(cc_df, aes(v1, v2, fill = r)) + geom_tile() +
+  geom_text(aes(label = sprintf("%.2f", r)), size = 2.6) +
+  scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b", limits = c(-1,1)) +
+  labs(title = "Correlacions entre constructes (Spearman)", x = NULL, y = NULL) +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 40, hjust = 1))
+ggsave("sortides/fig_correlacions_constructes.png", g_corr, width = 8, height = 6.5, dpi = 120)
+
+# 2) Dispersió P3: coherència i propòsit vs energia (amb recta de regressió)
+p3 <- dades %>% select(idx_funcionament_xarxa, idx_alineament_proposit, idx_energia) %>%
+  pivot_longer(c(idx_funcionament_xarxa, idx_alineament_proposit),
+               names_to = "predictor", values_to = "valor") %>%
+  mutate(predictor = recode(predictor, idx_funcionament_xarxa = "Funcionament de la xarxa",
+                            idx_alineament_proposit = "Alineament de propòsit"))
+g_p3 <- ggplot(p3, aes(valor, idx_energia)) +
+  geom_point(alpha = .4) + geom_smooth(method = "lm", se = TRUE, color = "#b2182b") +
+  facet_wrap(~ predictor) +
+  labs(title = "P3 · Coherència i propòsit vs energia", x = "Puntuació (1-7)", y = "Energia (1-7)") +
+  theme_minimal()
+ggsave("sortides/fig_P3_dispersio.png", g_p3, width = 9, height = 4.5, dpi = 120)
+
+# 3) Forest plot dels coeficients de la regressió de l'energia (empíric)
+cf <- as.data.frame(summary(m_en_emp)$coefficients); cf$terme <- rownames(cf)
+cf <- cf[cf$terme != "(Intercept)", ]
+ci <- confint(m_en_emp); cf$lo <- ci[cf$terme,1]; cf$hi <- ci[cf$terme,2]
+cf$terme <- recode(cf$terme, EF1="Coherència sistema (EF1)", EF2="Coherència equip (EF2)",
+                   EF3="Coherència propòsit (EF3)", proposit="Alineament de propòsit")
+g_reg <- ggplot(cf, aes(Estimate, reorder(terme, Estimate))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_pointrange(aes(xmin = lo, xmax = hi)) +
+  labs(title = "Predictors de l'energia (betes estandarditzades, IC 95%)",
+       x = "Beta estandarditzada", y = NULL) + theme_minimal()
+ggsave("sortides/fig_regressio_energia.png", g_reg, width = 8, height = 4, dpi = 120)
+
+# 4) Variació de l'energia entre escoles (ICC): mitjana per escola ordenada
+esc_en <- escola_nivell %>% filter(n_resp >= 2) %>% arrange(idx_energia) %>%
+  mutate(ordre = row_number())
+g_icc <- ggplot(esc_en, aes(ordre, idx_energia)) +
+  geom_hline(yintercept = mean(dades$idx_energia, na.rm = TRUE), linetype = "dashed", color = "#b2182b") +
+  geom_point(aes(size = n_resp), alpha = .6) +
+  labs(title = "Energia mitjana per escola (escoles amb ≥2 respostes)",
+       subtitle = "Línia = mitjana global. La dispersió reflecteix el component d'escola (ICC≈0,25)",
+       x = "Escoles (ordenades per energia)", y = "Energia mitjana (1-7)", size = "n") +
+  theme_minimal()
+ggsave("sortides/fig_energia_per_escola.png", g_icc, width = 8, height = 5, dpi = 120)
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
