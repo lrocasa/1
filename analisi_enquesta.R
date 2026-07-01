@@ -1479,6 +1479,11 @@ prev_estres_esc <- escola_nivell %>%
 cat("\n--- Factors d'estrès: proporció mitjana per escola (top) ---\n")
 print(as.data.frame(head(prev_estres_esc, 8)), row.names = FALSE)
 
+# quins factors d'estrès concrets difereixen segons participació FECC (escola)
+tests_estres_fecc <- mw_esc(escola_nivell, "particip_FECC_esc", vars_estres)
+cat("\n--- Factors d'estrès per participació FECC (escola): Mann-Whitney ---\n")
+print(as.data.frame(tests_estres_fecc %>% arrange(p)), row.names = FALSE)
+
 # càrrega d'estrès de l'escola per xarxa i correlació amb energia
 tests_estres_xarxa <- mw_esc(escola_nivell, "Xarxa_esc", "n_estres_esc")
 cat("\n--- Càrrega d'estrès (escola) per xarxa ---\n"); print(as.data.frame(tests_estres_xarxa), row.names = FALSE)
@@ -1492,6 +1497,7 @@ write_xlsx(list("Escoles_mitjanes" = escola_nivell,
                 "Territori_escola" = tests_escola_territ,
                 "ParticipacioFECC_escola" = tests_escola_fecc,
                 "Estres_prevalenca_escola" = prev_estres_esc,
+                "Estres_x_ParticipFECC" = tests_estres_fecc,
                 "Estres_carrega_xarxa" = tests_estres_xarxa),
            "sortides/resultats_nivell_escola.xlsx")
 
