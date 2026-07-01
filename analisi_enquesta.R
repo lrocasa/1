@@ -1676,11 +1676,13 @@ clA <- fer_clusters(
   labels = c("Funcionament","EnergiaRecup","Proposit"),
   nom    = "A3", coh_vec = dades$idx_funcionament_xarxa, en_vec = dades$idx_energia_recup)
 
+# Versió B · 5 dimensions: energia i recuperació FUSIONADES (l'AFE mostra que no
+# es diferencien empíricament -> separar-les no seria justificable).
 clB <- fer_clusters(
-  cols   = c("idx_EF3","idx_EF2","idx_EF1","idx_energia","idx_recuperacio","idx_alineament_proposit"),
-  labels = c("CoherProposit","CoherEquip","CoherXarxa","Energia","Recuperacio","Proposit"),
-  nom    = "B6", coh_vec = rowMeans(dades[, c("idx_EF1","idx_EF2","idx_EF3")], na.rm = TRUE),
-  en_vec = dades$idx_energia)
+  cols   = c("idx_EF3","idx_EF2","idx_EF1","idx_energia_recup","idx_alineament_proposit"),
+  labels = c("CoherProposit","CoherEquip","CoherXarxa","EnergiaRecup","Proposit"),
+  nom    = "B5", coh_vec = rowMeans(dades[, c("idx_EF1","idx_EF2","idx_EF3")], na.rm = TRUE),
+  en_vec = dades$idx_energia_recup)
 
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
@@ -1688,7 +1690,7 @@ cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
     " - resultats_regressio.xlsx (regressió múltiple + supòsits + errors robustos)\n",
     " - resultats_mediacio.xlsx (mediació coherència/propòsit -> energia)\n",
-    " - resultats_clusters_A3.xlsx i _B6.xlsx (perfils + casos per a entrevistes)\n",
+    " - resultats_clusters_A3.xlsx i _B5.xlsx (perfils + casos per a entrevistes)\n",
     " - resultats_acord_escola.xlsx (ICC i consens intra-escola)\n",
     " - resultats_nivell_escola.xlsx (constructes agregats per escola + segmentadors)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
