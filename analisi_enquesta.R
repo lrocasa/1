@@ -1924,6 +1924,41 @@ g_icc <- ggplot(esc_en, aes(ordre, idx_energia)) +
   theme_minimal()
 ggsave("sortides/fig_energia_per_escola.png", g_icc, width = 8, height = 5, dpi = 120)
 
+# Etiquetes de constructe (nomenclatura acordada)
+constr_fig <- c(idx_funcionament_xarxa = "Funcionament", idx_energia = "Energia",
+  idx_recuperacio = "Recuperació", idx_alineament_proposit = "Connexió propòsit",
+  idx_EF3 = "EF3·Coher.propòsit", idx_EF2 = "EF2·Equip", idx_EF1 = "EF1·Sistema")
+
+# 5) Constructes per NIVELL JERÀRQUIC (perfils/snake)
+niv_long <- dades %>% filter(!is.na(NivellJerarquic)) %>%
+  select(NivellJerarquic, all_of(names(constr_fig))) %>%
+  pivot_longer(-NivellJerarquic, names_to = "v", values_to = "val") %>%
+  group_by(NivellJerarquic, v) %>% summarise(m = mean(val, na.rm = TRUE), .groups = "drop") %>%
+  mutate(constructe = factor(constr_fig[v], levels = unname(constr_fig)))
+g_niv <- ggplot(niv_long, aes(constructe, m, group = NivellJerarquic, color = NivellJerarquic)) +
+  geom_line(linewidth = 1) + geom_point(size = 2) + coord_cartesian(ylim = c(4, 7)) +
+  labs(title = "Constructes per nivell jeràrquic", x = NULL, y = "Mitjana (1-7)", color = "Nivell") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 25, hjust = 1))
+ggsave("sortides/fig_nivell_jerarquic.png", g_niv, width = 9, height = 5, dpi = 120)
+
+# 6) Mitjana de cada constructe per ROL (multi-pertinença), heatmap
+rol_long <- map_dfr(grups_rol, function(gr) {
+  ind <- dades[[paste0("rolind_", gr)]] == "Sí"
+  tibble(rol = gr, v = names(constr_fig),
+         m = sapply(names(constr_fig), function(cc) mean(dades[[cc]][ind], na.rm = TRUE)),
+         n = sum(ind, na.rm = TRUE))
+}) %>% filter(n >= 5) %>%
+  mutate(constructe = factor(constr_fig[v], levels = unname(constr_fig)),
+         rol = paste0(rol, " (", n, ")"))
+g_rol <- ggplot(rol_long, aes(constructe, rol, fill = m)) + geom_tile() +
+  geom_text(aes(label = sprintf("%.1f", m)), size = 2.6) +
+  scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b",
+                       midpoint = 5.3, limits = c(4, 7)) +
+  labs(title = "Mitjana de cada constructe per rol (multi-pertinença)",
+       x = NULL, y = NULL, fill = "Mitjana") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 30, hjust = 1))
+ggsave("sortides/fig_rol_heatmap.png", g_rol, width = 9, height = 6, dpi = 120)
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
