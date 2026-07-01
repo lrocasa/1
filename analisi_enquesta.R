@@ -797,13 +797,18 @@ write_xlsx(c(list("Resum_solucions" = afe_resum),
 fa3 <- afe_models[["F3"]]
 L3  <- unclass(fa3$loadings)
 CARREGA_MIN <- 0.30
+# Ítems problemàtics exclosos dels factors empírics (contingut incoherent amb la
+# ubicació empírica i/o càrrega negativa contradictòria). Es mantenen als teòrics.
+#  - coh06_r: ja cau per sota del llindar
+#  - coh13_r: càrrega -0,60 a EF1 (signe contradictori) i parla d'equip, no de sistema
+items_exclosos_emp <- c("coh13_r")
 
 # Assignació de cada ítem al factor on carrega més
 assig_emp <- tibble(
   item    = rownames(L3),
   factor  = paste0("EF", apply(abs(L3), 1, which.max)),
   carrega = round(apply(L3, 1, function(r) r[which.max(abs(r))]), 3)) %>%
-  mutate(assignat = abs(carrega) >= CARREGA_MIN,
+  mutate(assignat = abs(carrega) >= CARREGA_MIN & !item %in% items_exclosos_emp,
          dimensio_teorica = teoria_dim[item])
 cat("\n===== DIMENSIONS EMPÍRIQUES (AFE 3 factors) =====\n")
 print(as.data.frame(assig_emp), row.names = FALSE)
