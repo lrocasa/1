@@ -150,7 +150,7 @@ Kruskal-Wallis sobre els constructes: l'única diferència que **supera la corre
 - **FP** → més energia.
 
 ### 6.4 Xarxa d'escoles (denominació)
-Pertànyer a una xarxa s'associa a puntuacions **lleugerament més baixes** en coherència de propòsit (d ≈ −0,47), funcionament, recuperació i energia (efectes petits-moderats). *Cautela: el grup "no xarxa" inclou personal FECC central sense denominació.*
+Aquesta comparació es fa **només sobre escoles** (respostes amb docència/intervenció directa, n = 102: **66 en xarxa** vs **36 independents**), per no barrejar-hi el personal FECC central. Restringint així, l'efecte **s'atenua** respecte de la mostra completa: pertànyer a una xarxa s'associa a puntuacions **lleugerament més baixes** en **coherència de propòsit** (dimensió D1 / factor EF3, p ≈ 0,04) i, com a tendència, en energia (p ≈ 0,05). La resta de constructes no difereixen significativament. *(La versió anterior sobre tota la mostra sobreestimava aquest efecte perquè el grup "no xarxa" incloïa personal central sense denominació.)*
 
 ### 6.5 Complexitat del centre i context territorial
 **Sense diferències significatives.** Ni el tram de complexitat ni el servei territorial discriminen els constructes.

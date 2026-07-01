@@ -414,11 +414,17 @@ dades <- dades %>%
     EeX_f    = factor(EeX,    levels = c(0,1), labels = c("No","Sí")),
     EeXAMC_f = factor(EeXAMC, levels = c(0,1), labels = c("No","Sí")),
     EdD_f    = factor(EdD,    levels = c(0,1), labels = c("No","Sí")),
-    # Xarxa d'escoles: té denominació (nom) -> forma part d'una xarxa (Sí);
-    # "0" o buit -> no en forma part (No). Binari.
-    Xarxa = factor(ifelse(is.na(Denominacio) |
-                          trimws(as.character(Denominacio)) %in% c("0","","NA","nan"),
-                          "No", "Sí"), levels = c("No","Sí")),
+    # Xarxa d'escoles: NOMÉS té sentit per a ESCOLES. Considerem "escola" qui fa
+    # docència/intervenció directa (DocenciaDirecta == "Sí"); la resta (personal
+    # FECC central, etc.) queda com NA i s'exclou de tota anàlisi de Xarxa.
+    # Dins les escoles: té denominació (nom) -> forma part d'una xarxa (Sí);
+    # "0"/buit -> escola independent (No).
+    Xarxa = factor(
+      ifelse(is.na(DocenciaDirecta) | DocenciaDirecta != "Sí", NA_character_,
+        ifelse(is.na(Denominacio) |
+               trimws(as.character(Denominacio)) %in% c("0","","NA","nan"),
+               "No", "Sí")),
+      levels = c("No","Sí")),
 
     # Cargo agrupat segons la classificació definida (9 grups)
     Cargo_grup = fct_collapse(factor(Cargo),
