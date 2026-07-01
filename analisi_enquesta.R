@@ -1753,7 +1753,27 @@ freq_factors <- tibble(factor = colnames(E), n = colSums(E)) %>%
   mutate(pct = round(100 * n / n_tot, 1)) %>% arrange(desc(n))
 cat("\n===== FREQÜÈNCIA dels factors d'estrès (ítem 22) =====\n")
 print(as.data.frame(freq_factors), row.names = FALSE)
-cat(sprintf("Nombre mitjà de factors per persona: %.1f\n", mean(rowSums(E))))
+
+# --- Distribució del NOMBRE de factors per persona (rang i forma de la corba) ---
+n_est <- rowSums(E)
+desc_n <- psych::describe(n_est)
+cat("\n===== DISTRIBUCIÓ del nombre de factors per persona =====\n")
+cat(sprintf("Rang: %d–%d | mitjana=%.2f | mediana=%d | DE=%.2f | asimetria=%.2f | curtosi=%.2f\n",
+            min(n_est), max(n_est), mean(n_est), median(n_est), sd(n_est),
+            desc_n$skew, desc_n$kurtosis))
+print(table(`n_factors` = n_est))
+sw <- shapiro.test(n_est)
+cat(sprintf("Shapiro-Wilk (normalitat): W=%.3f, p=%.4f -> %s\n", sw$statistic, sw$p.value,
+            ifelse(sw$p.value < 0.05, "s'allunya de la normal", "compatible amb normal")))
+g_hist <- ggplot(data.frame(n = n_est), aes(n)) +
+  geom_histogram(binwidth = 1, fill = "#c0392b", color = "white") +
+  geom_vline(xintercept = mean(n_est), linetype = "dashed") +
+  scale_x_continuous(breaks = 0:max(n_est)) +
+  labs(title = "Distribució del nombre de factors d'estrès per persona",
+       subtitle = sprintf("rang %d–%d · mitjana %.1f · asimetria %.2f",
+                          min(n_est), max(n_est), mean(n_est), desc_n$skew),
+       x = "Nombre de factors marcats", y = "Persones") + theme_minimal()
+ggsave("sortides/estres_distribucio_nfactors.png", g_hist, width = 8, height = 5, dpi = 120)
 
 # Matriu de co-ocurrència (quants marquen cada parella)
 co <- crossprod(E)                     # diagonal = individuals; fora = parelles
