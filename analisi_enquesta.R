@@ -92,20 +92,34 @@ noms_curts <- c(
 stopifnot(length(noms_curts) == ncol(dades))
 names(dades) <- noms_curts
 
-# ---- 2b. Neteja: propagar la Denominació a nivell d'escola -----------------
-# Errors detectats i confirmats: dins d'algunes escoles, algun enquestat no va
-# omplir la denominació tot i pertànyer a una xarxa (COR DE MARIA, IPSE, MARE DEL
-# DIVÍ PASTOR, SANT JOAN BOSCO, SANTA TERESA DE JESÚS). Regla general: dins de
-# cada escola, si ALGUNA resposta té denominació, s'assigna a totes les respostes
-# d'aquella escola; si TOTES són buides, l'escola no forma part de cap xarxa.
+# ---- 2b. Neteja de la Denominació (a nivell d'escola) ----------------------
+# (i) Propagació dins l'escola: si alguna resposta d'una escola té denominació,
+#     s'assigna a totes; si TOTES són buides, l'escola no és de xarxa. Corregeix
+#     COR DE MARIA, IPSE, MARE DEL DIVÍ PASTOR, SANT JOAN BOSCO, STA TERESA JESÚS.
+# (ii) Correccions manuals: escoles sense CAP denominació però que pertanyen a una
+#     xarxa (confirmat per l'usuària a partir del nom de l'escola).
 den_buit <- function(x) is.na(x) | trimws(as.character(x)) %in% c("0","","NA","nan")
+norm_esc <- function(x) gsub("\\s+", " ",
+  stringi::stri_trans_general(toupper(trimws(as.character(x))), "Latin-ASCII"))
+
 dades <- dades %>%
-  group_by(.esc_key = toupper(trimws(as.character(Escola)))) %>%
+  group_by(.k = norm_esc(Escola)) %>%
   mutate(.den_esc = { v <- Denominacio[!den_buit(Denominacio)]
                       if (length(v) > 0) as.character(v[1]) else NA_character_ },
          Denominacio = ifelse(!den_buit(Escola) & den_buit(Denominacio) & !is.na(.den_esc),
                               .den_esc, as.character(Denominacio))) %>%
-  ungroup() %>% select(-.esc_key, -.den_esc)
+  ungroup() %>% select(-.k, -.den_esc)
+
+correccions_xarxa <- c(
+  "ESCOLA PROFESSIONAL SALESIANA SARRIA" = "Salesians Catalunya",
+  "FEDAC - CANET"        = "Fundació Educativa Dominiques de l'Anunciata Pare Coll - FEDAC",
+  "FEDAC - SANT FELIU"   = "Fundació Educativa Dominiques de l'Anunciata Pare Coll - FEDAC",
+  "VEDRUNA MALGRAT DE MAR" = "Fundació Vedruna Catalunya Educació",
+  "VEDRUNA TARREGA"      = "Fundació Vedruna Catalunya Educació")
+.k_esc <- norm_esc(dades$Escola)
+for (.nm in names(correccions_xarxa))
+  dades$Denominacio[.k_esc == .nm & den_buit(dades$Denominacio)] <- correccions_xarxa[[.nm]]
+rm(.k_esc)
 
 # ---- 3. Multiresposta: de text/buit -> 0/1 --------------------------------
 a_binaria <- function(x) as.integer(!is.na(x) & x != "")
