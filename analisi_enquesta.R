@@ -1584,11 +1584,45 @@ write_xlsx(c(list("Diagnostic_models" = diag_models),
              setNames(lapply(models, coef_taula), substr(paste0("Coef_", names(models)),1,31))),
            "sortides/resultats_regressio.xlsx")
 
+# ===========================================================================
+#  PART P · MEDIACIÓ (direccionalitat coherència <-> propòsit sobre l'energia)
+#  Efecte indirecte a*b amb IC per bootstrap (Preacher-Hayes), en base R.
+#  Es proven les DUES direccions competidores. NOTA: amb dades transversals la
+#  mediació és 'consistent amb' un mecanisme, però NO en demostra la causalitat.
+# ===========================================================================
+mediacio <- function(df, X, M, Y, B = 2000) {
+  f <- na.omit(df[, c(X, M, Y)]); names(f) <- c("X","M","Y"); n <- nrow(f)
+  a  <- coef(lm(M ~ X, f))["X"]
+  mY <- lm(Y ~ X + M, f); b <- coef(mY)["M"]; cp <- coef(mY)["X"]
+  c_tot <- coef(lm(Y ~ X, f))["X"]; ab <- a*b
+  boot <- replicate(B, { i <- sample(n, replace = TRUE); gg <- f[i,]
+    coef(lm(M ~ X, gg))["X"] * coef(lm(Y ~ X + M, gg))["M"] })
+  ci <- quantile(boot, c(.025, .975), na.rm = TRUE)
+  tibble(X = X, M = M, Y = Y,
+         efecte_total_c = round(unname(c_tot),3), directe_c_prima = round(unname(cp),3),
+         indirecte_ab = round(unname(ab),3),
+         ic_low = round(unname(ci[1]),3), ic_high = round(unname(ci[2]),3),
+         prop_mediada = round(unname(ab/c_tot),2),
+         mediacio = ifelse(ci[1]*ci[2] > 0, "SÍ (IC exclou 0)", "no"))
+}
+set.seed(2024)
+taula_mediacio <- bind_rows(
+  mediacio(dreg, "proposit", "funcionament", "energia"),   # coherència mitjança propòsit->energia
+  mediacio(dreg, "funcionament", "proposit", "energia"),   # propòsit mitjança coherència->energia
+  mediacio(dreg, "proposit", "EF2", "energia"),            # (coherència = equip, EF2)
+  mediacio(dreg, "EF2", "proposit", "energia"))
+cat("\n===== MEDIACIÓ (efecte indirecte a*b amb IC bootstrap) =====\n")
+print(as.data.frame(taula_mediacio), row.names = FALSE)
+cat("Interpretació: 'mediació=SÍ' vol dir que l'efecte indirecte és significatiu;\n",
+    "amb dades transversals indica compatibilitat amb el mecanisme, NO causalitat.\n")
+write_xlsx(list("Mediacio" = taula_mediacio), "sortides/resultats_mediacio.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
     " - resultats_regressio.xlsx (regressió múltiple + supòsits + errors robustos)\n",
+    " - resultats_mediacio.xlsx (mediació coherència/propòsit -> energia)\n",
     " - resultats_acord_escola.xlsx (ICC i consens intra-escola)\n",
     " - resultats_nivell_escola.xlsx (constructes agregats per escola + segmentadors)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
