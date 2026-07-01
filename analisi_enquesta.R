@@ -1638,7 +1638,15 @@ sil_k <- sapply(2:6, function(k) {
   km <- kmeans(Xc, centers = k, nstart = 25)
   mean(cluster::silhouette(km$cluster, dist(Xc))[, 3]) })
 names(sil_k) <- 2:6
-cat("\n===== CLÚSTERS · silueta mitjana per k =====\n"); print(round(sil_k, 3))
+cat("\n===== CLÚSTERS · triangulació del nombre de grups =====\n")
+cat("Silueta mitjana per k:\n"); print(round(sil_k, 3))
+# colze (WSS) i gap statistic per triangular la k
+wss_k <- sapply(2:6, function(k) { set.seed(1); kmeans(Xc, k, nstart = 25)$tot.withinss })
+names(wss_k) <- 2:6
+cat("WSS (mètode del colze):\n"); print(round(wss_k, 1))
+gap <- tryCatch(cluster::clusGap(Xc, FUN = kmeans, nstart = 25, K.max = 6, B = 50),
+                error = function(e) NULL)
+if (!is.null(gap)) { cat("Gap statistic per k=1..6:\n"); print(round(gap$Tab[, "gap"], 3)) }
 k_opt <- as.integer(names(sil_k)[which.max(sil_k)])
 cat("k triat (màxima silueta):", k_opt, "\n")
 
