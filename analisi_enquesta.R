@@ -1684,6 +1684,38 @@ extrems <- dclu %>% slice_max(dist_global, n = 6) %>%
 cat("\n===== CASOS EXTREMS (perfils més marcats) =====\n")
 print(as.data.frame(extrems), row.names = FALSE)
 
+# --- Solució de k=3 (subperfils, per enriquir la tria d'entrevistes) -------
+set.seed(2024)
+km3 <- kmeans(Xc, centers = 3, nstart = 50)
+dclu$cluster3 <- factor(km3$cluster)
+perfil3 <- dclu %>% group_by(cluster3) %>%
+  summarise(n = n(), across(c(Funcionament, Energia, Recuperacio, Proposit),
+                            ~ round(mean(.x, na.rm = TRUE), 2)), .groups = "drop")
+cat("\n===== PERFIL DELS CLÚSTERS k=3 (mitjanes 1-7) =====\n")
+print(as.data.frame(perfil3), row.names = FALSE)
+centres3 <- km3$centers[km3$cluster, , drop = FALSE]
+dclu$dist3 <- round(sqrt(rowSums((Xc - centres3)^2)), 2)
+rep3 <- dclu %>% group_by(cluster3) %>% slice_min(dist3, n = 2, with_ties = FALSE) %>%
+  select(cluster3, id_persona, Funcionament, Energia, Recuperacio, Proposit,
+         Cargo_grup, NivellJerarquic) %>% ungroup()
+cat("\nCasos representatius k=3:\n"); print(as.data.frame(rep3), row.names = FALSE)
+
+# --- Casos MIXTOS (coherència i energia discordants) -----------------------
+# z_func i z_energia; discordança = z_func - z_energia
+zf <- Xc[, "Funcionament"]; ze <- Xc[, "Energia"]
+dclu$z_func <- round(zf, 2); dclu$z_energia <- round(ze, 2)
+dclu$discordanca <- round(zf - ze, 2)   # + coherent sense energia | - energia sense coherència
+mixt_coh_sense_energia <- dclu %>% filter(zf > 0.5, ze < -0.5) %>%
+  arrange(desc(discordanca)) %>%
+  select(id_persona, Funcionament, Energia, Proposit, Cargo_grup, NivellJerarquic, discordanca)
+mixt_energia_sense_coh <- dclu %>% filter(zf < -0.5, ze > 0.5) %>%
+  arrange(discordanca) %>%
+  select(id_persona, Funcionament, Energia, Proposit, Cargo_grup, NivellJerarquic, discordanca)
+cat("\n===== CASOS MIXTOS: ALTA coherència + BAIXA energia =====\n")
+print(as.data.frame(mixt_coh_sense_energia), row.names = FALSE)
+cat("\n===== CASOS MIXTOS: BAIXA coherència + ALTA energia =====\n")
+print(as.data.frame(mixt_energia_sense_coh), row.names = FALSE)
+
 # --- Gràfics ---------------------------------------------------------------
 tryCatch({
   ggsave("sortides/clusters_silueta.png",
@@ -1695,11 +1727,16 @@ tryCatch({
          width = 8, height = 6, dpi = 120)
 }, error = function(e) cat("(gràfics de clúster omesos:", conditionMessage(e), ")\n"))
 
-write_xlsx(list("Perfil_clusters" = perfil,
+write_xlsx(list("Perfil_clusters_k2" = perfil,
+                "Perfil_clusters_k3" = perfil3,
                 "Casos_representatius" = representatius,
+                "Casos_representatius_k3" = rep3,
                 "Casos_extrems" = extrems,
-                "Assignacio" = dclu %>% select(id_persona, cluster, Funcionament,
-                               Energia, Recuperacio, Proposit, dist_centroide)),
+                "Mixt_coherencia_sense_energia" = mixt_coh_sense_energia,
+                "Mixt_energia_sense_coherencia" = mixt_energia_sense_coh,
+                "Assignacio" = dclu %>% select(id_persona, cluster, cluster3,
+                               Funcionament, Energia, Recuperacio, Proposit,
+                               z_func, z_energia, discordanca)),
            "sortides/resultats_clusters.xlsx")
 
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
