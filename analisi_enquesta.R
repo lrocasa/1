@@ -1501,10 +1501,94 @@ write_xlsx(list("Escoles_mitjanes" = escola_nivell,
                 "Estres_carrega_xarxa" = tests_estres_xarxa),
            "sortides/resultats_nivell_escola.xlsx")
 
+# ===========================================================================
+#  PART O · REGRESSIÓ MÚLTIPLE (prova analítica directa de P3)
+#  DV: energia i recuperació. Predictors: dimensions de coherència + alineament
+#  de propòsit. Coeficients ESTANDARDITZATS (pes comparable). Es comproven els
+#  supòsits (normalitat, homoscedasticitat, independència dels residus) i es
+#  reporten ERRORS ROBUSTOS (HC3) com a alternativa si hi ha heteroscedasticitat.
+# ===========================================================================
+z <- function(x) as.numeric(scale(x))
+dreg <- dades %>% transmute(
+  energia      = z(idx_energia),      recuperacio  = z(idx_recuperacio),
+  funcionament = z(idx_funcionament_xarxa), proposit = z(idx_alineament_proposit),
+  EF1 = z(idx_EF1), EF2 = z(idx_EF2), EF3 = z(idx_EF3))
+
+# --- errors robustos HC3 i diagnòstic de supòsits (base R, sense paquets extra)
+robust_se <- function(m) {
+  X <- model.matrix(m); u <- resid(m); h <- hatvalues(m)
+  bread <- solve(crossprod(X)); meat <- crossprod(X * (u/(1 - h)))
+  sqrt(diag(bread %*% meat %*% bread))
+}
+coef_taula <- function(m) {
+  s <- summary(m)$coefficients; rse <- robust_se(m)
+  data.frame(terme = rownames(s), beta = round(s[,1],3), se = round(s[,2],3),
+             p = round(s[,4],4), se_HC3 = round(rse,3),
+             p_HC3 = round(2*pt(abs(s[,1]/rse), m$df.residual, lower.tail=FALSE),4),
+             row.names = NULL)
+}
+diagnostic <- function(m, nom) {
+  r <- resid(m); f <- fitted(m)
+  bp <- summary(lm(I(r^2) ~ f)); bp_p <- pf(bp$fstatistic[1], bp$fstatistic[2],
+                                            bp$fstatistic[3], lower.tail = FALSE)
+  tibble(model = nom, n = length(r),
+         R2 = round(summary(m)$r.squared,3), R2_adj = round(summary(m)$adj.r.squared,3),
+         shapiro_p = round(shapiro.test(r)$p.value,3),          # normalitat residus
+         BreuschPagan_p = round(unname(bp_p),3),                # homoscedasticitat
+         DurbinWatson = round(sum(diff(r)^2)/sum(r^2),2))       # independència (~2 = ok)
+}
+
+# --- Models principals: ENERGIA i RECUPERACIÓ ------------------------------
+m_en_emp  <- lm(energia ~ EF1 + EF2 + EF3 + proposit, data = dreg)   # empíric
+m_en_teo  <- lm(energia ~ funcionament + proposit, data = dreg)      # teòric
+m_rec_emp <- lm(recuperacio ~ EF1 + EF2 + EF3 + proposit, data = dreg)
+m_rec_teo <- lm(recuperacio ~ funcionament + proposit, data = dreg)
+
+models <- list("Energia ~ coherència(emp)+propòsit" = m_en_emp,
+               "Energia ~ funcionament(teo)+propòsit" = m_en_teo,
+               "Recuperació ~ coherència(emp)+propòsit" = m_rec_emp,
+               "Recuperació ~ funcionament(teo)+propòsit" = m_rec_teo)
+diag_models <- map_dfr(names(models), ~ diagnostic(models[[.x]], .x))
+cat("\n===== REGRESSIÓ · supòsits i ajust dels models =====\n")
+print(as.data.frame(diag_models), row.names = FALSE)
+for (nm in names(models)) {
+  cat("\n--- ", nm, " ---\n", sep=""); print(coef_taula(models[[nm]]))
+}
+
+# --- Direccionalitat coherència <-> propòsit -------------------------------
+m_coh_de_prop <- lm(funcionament ~ proposit, data = dreg)
+m_prop_de_coh <- lm(proposit ~ funcionament, data = dreg)
+cat(sprintf("\n===== Direccionalitat (regressió simple, R2 idèntic per simetria) =====\n"))
+cat(sprintf("Funcionament ~ Propòsit : R2=%.3f | Propòsit ~ Funcionament : R2=%.3f\n",
+            summary(m_coh_de_prop)$r.squared, summary(m_prop_de_coh)$r.squared))
+cat("NOTA: amb regressió simple el R2 és el mateix en tots dos sentits (= r^2);\n",
+    "la 'direcció' NO es pot decidir així. Caldria un model de mediació/SEM.\n")
+
+# --- Relacions ENTRE factors del Bloc 1 ------------------------------------
+m_ef1 <- lm(EF1 ~ EF2 + EF3, data = dreg)
+m_ef2 <- lm(EF2 ~ EF1 + EF3, data = dreg)
+m_ef3 <- lm(EF3 ~ EF1 + EF2, data = dreg)
+cat("\n===== Relacions entre factors del Bloc 1 (betes estandarditzades) =====\n")
+for (nm in c("EF1~EF2+EF3","EF2~EF1+EF3","EF3~EF1+EF2")) {
+  m <- list(get("m_ef1"), get("m_ef2"), get("m_ef3"))[[match(nm, c("EF1~EF2+EF3","EF2~EF1+EF3","EF3~EF1+EF2"))]]
+  cat("\n--- ", nm, " (R2=", round(summary(m)$r.squared,3), ") ---\n", sep=""); print(coef_taula(m))
+}
+
+# --- Gràfics de residus dels models principals -----------------------------
+for (nm in c("m_en_emp","m_rec_emp")) {
+  png(paste0("sortides/regressio_residus_", nm, ".png"), width = 900, height = 700, res = 110)
+  par(mfrow = c(2,2)); plot(get(nm)); dev.off()
+}
+
+write_xlsx(c(list("Diagnostic_models" = diag_models),
+             setNames(lapply(models, coef_taula), substr(paste0("Coef_", names(models)),1,31))),
+           "sortides/resultats_regressio.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
+    " - resultats_regressio.xlsx (regressió múltiple + supòsits + errors robustos)\n",
     " - resultats_acord_escola.xlsx (ICC i consens intra-escola)\n",
     " - resultats_nivell_escola.xlsx (constructes agregats per escola + segmentadors)\n",
     " - resultats_control.xlsx (ítems 23-24-25 vs constructes TEÒRICS)\n",
