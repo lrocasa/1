@@ -1756,14 +1756,14 @@ fer_clusters <- function(cols, labels, nom, coh_vec, en_vec) {
 
 clA <- fer_clusters(
   cols   = c("idx_funcionament_xarxa","idx_energia_recup","idx_alineament_proposit"),
-  labels = c("Funcionament","EnergiaRecup","Proposit"),
+  labels = c("Funcionament","EnergiaRecup","ConnexioProp"),
   nom    = "A3", coh_vec = dades$idx_funcionament_xarxa, en_vec = dades$idx_energia_recup)
 
 # Versió B · 5 dimensions: energia i recuperació FUSIONADES (l'AFE mostra que no
 # es diferencien empíricament -> separar-les no seria justificable).
 clB <- fer_clusters(
   cols   = c("idx_EF3","idx_EF2","idx_EF1","idx_energia_recup","idx_alineament_proposit"),
-  labels = c("CoherProposit","CoherEquip","CoherXarxa","EnergiaRecup","Proposit"),
+  labels = c("EF3_CoherProp","EF2_Equip","EF1_Sistema","EnergiaRecup","ConnexioProp"),
   nom    = "B5", coh_vec = rowMeans(dades[, c("idx_EF1","idx_EF2","idx_EF3")], na.rm = TRUE),
   en_vec = dades$idx_energia_recup)
 
