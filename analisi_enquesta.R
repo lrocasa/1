@@ -1671,15 +1671,18 @@ fer_clusters <- function(cols, labels, nom, coh_vec, en_vec) {
               nrow(mixt1), nrow(mixt2)))
   # --- Gràfics: dispersió (mapa PCA) i dendrograma (jeràrquic) --------------
   tryCatch({
-    ggsave(paste0("sortides/clusters_", nom, "_mapa_k5.png"),
-           factoextra::fviz_cluster(list(data = Xc, cluster = km5$cluster),
-             geom = "point", ellipse.type = "convex", palette = "Set2") +
-             ggplot2::labs(title = paste0("Distribució dels punts per clúster (k=5) · versió ", nom)),
-           width = 8, height = 6, dpi = 120)
-    ggsave(paste0("sortides/clusters_", nom, "_dendrograma.png"),
-           factoextra::fviz_dend(hc, k = 5, cex = 0.4, show_labels = FALSE, palette = "Set2") +
-             ggplot2::labs(title = paste0("Dendrograma jeràrquic (Ward, k=5) · versió ", nom)),
-           width = 9, height = 6, dpi = 120)
+    for (kk in c(3, 5)) {
+      cl <- if (kk == 3) km3$cluster else km5$cluster
+      ggsave(paste0("sortides/clusters_", nom, "_mapa_k", kk, ".png"),
+             factoextra::fviz_cluster(list(data = Xc, cluster = cl),
+               geom = "point", ellipse.type = "convex", palette = "Set2") +
+               ggplot2::labs(title = paste0("Distribució per clúster (k=", kk, ") · versió ", nom)),
+             width = 8, height = 6, dpi = 120)
+      ggsave(paste0("sortides/clusters_", nom, "_dendrograma_k", kk, ".png"),
+             factoextra::fviz_dend(hc, k = kk, cex = 0.4, show_labels = FALSE, palette = "Set2") +
+               ggplot2::labs(title = paste0("Dendrograma jeràrquic (Ward, k=", kk, ") · versió ", nom)),
+             width = 9, height = 6, dpi = 120)
+    }
   }, error = function(e) cat("(gràfics de clúster omesos:", conditionMessage(e), ")\n"))
   write_xlsx(list(Perfil_k2 = perfil2, Perfil_k3 = perfil3, Perfil_k5 = perfil5,
                   Representatius = repr, Extrems = extr, Mixt_coh_sense_energia = mixt1,
