@@ -1732,12 +1732,70 @@ clB <- fer_clusters(
   nom    = "B5", coh_vec = rowMeans(dades[, c("idx_EF1","idx_EF2","idx_EF3")], na.rm = TRUE),
   en_vec = dades$idx_energia_recup)
 
+# ===========================================================================
+#  PART R · FREQÜÈNCIES i CO-OCURRÈNCIES dels factors d'estrès (ítem 22)  [P2]
+#  Identifica els constrenyiments més prevalents i les seves combinacions més
+#  freqüents (parelles), amb la força d'associació (Jaccard i lift).
+# ===========================================================================
+etiq_estres <- c(dr_Carrega="Excés de càrrega", dr_Temps="Falta de temps",
+  dr_Interrupcions="Interrupcions", dr_Claredat="Falta de claredat",
+  dr_Conflictes="Conflictes", dr_Suport="Manca de suport", dr_Reunions="Reunions poc útils",
+  dr_SenseSentit="Sense sentit", dr_NoAlineat="Tasques no alineades",
+  dr_Canvis="Canvis/inestabilitat", dr_Incertesa="Incertesa", dr_Cansament="Cansament físic",
+  dr_Personal="Situacions personals", dr_Altres="Altres")
+
+E <- as.matrix(dades[, vars_estres]); E[is.na(E)] <- 0
+colnames(E) <- etiq_estres[colnames(E)]
+n_tot <- nrow(E)
+
+# Freqüència (prevalença) de cada factor
+freq_factors <- tibble(factor = colnames(E), n = colSums(E)) %>%
+  mutate(pct = round(100 * n / n_tot, 1)) %>% arrange(desc(n))
+cat("\n===== FREQÜÈNCIA dels factors d'estrès (ítem 22) =====\n")
+print(as.data.frame(freq_factors), row.names = FALSE)
+cat(sprintf("Nombre mitjà de factors per persona: %.1f\n", mean(rowSums(E))))
+
+# Matriu de co-ocurrència (quants marquen cada parella)
+co <- crossprod(E)                     # diagonal = individuals; fora = parelles
+diag_co <- diag(co)
+# parelles úniques amb Jaccard i lift
+pares <- expand.grid(a = colnames(E), b = colnames(E), stringsAsFactors = FALSE) %>%
+  filter(a < b) %>%
+  mutate(ambdos = co[cbind(a, b)],
+         nomes_a = diag_co[a], nomes_b = diag_co[b],
+         pct_mostra = round(100 * ambdos / n_tot, 1),
+         jaccard = round(ambdos / (nomes_a + nomes_b - ambdos), 2),
+         esperat = nomes_a * nomes_b / n_tot,
+         lift = round(ambdos / esperat, 2)) %>%
+  arrange(desc(ambdos))
+cat("\n===== CO-OCURRÈNCIES més FREQÜENTS (top parelles) =====\n")
+print(as.data.frame(head(pares %>% select(a,b,ambdos,pct_mostra,jaccard,lift), 12)), row.names = FALSE)
+cat("\n===== ASSOCIACIONS més FORTES (lift, parelles amb >=8 casos) =====\n")
+print(as.data.frame(pares %>% filter(ambdos >= 8) %>% arrange(desc(lift)) %>%
+        select(a,b,ambdos,jaccard,lift) %>% head(10)), row.names = FALSE)
+
+# Heatmap de co-ocurrència (% de la mostra que marca les dues)
+co_pct <- round(100 * co / n_tot, 0); co_long <- as.data.frame(as.table(co_pct))
+names(co_long) <- c("f1","f2","pct")
+g_co <- ggplot(co_long, aes(f1, f2, fill = pct)) + geom_tile() +
+  geom_text(aes(label = pct), size = 2.6) +
+  scale_fill_gradient(low = "white", high = "#c0392b") +
+  labs(title = "Co-ocurrència de factors d'estrès (% de la mostra)", x = NULL, y = NULL, fill = "%") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 40, hjust = 1))
+ggsave("sortides/estres_coocurrencia_heatmap.png", g_co, width = 9, height = 7, dpi = 120)
+
+write_xlsx(list("Frequencia_factors" = freq_factors,
+                "Coocurrencies_parelles" = pares,
+                "Matriu_coocurrencia" = as.data.frame(co) %>% rownames_to_column("factor")),
+           "sortides/resultats_coocurrencia_estres.xlsx")
+
 cat("\nFet! Revisa la carpeta 'sortides/':\n",
     " - resultats_analisi.xlsx (descriptius i fiabilitat teòrica)\n",
     " - resultats_segmentadors.xlsx (tests, mitjanes, post-hoc)\n",
     " - resultats_correlacio_P3.xlsx (3 dimensions principals: coherència<->energia)\n",
     " - resultats_regressio.xlsx (regressió múltiple + supòsits + errors robustos)\n",
     " - resultats_mediacio.xlsx (mediació coherència/propòsit -> energia)\n",
+    " - resultats_coocurrencia_estres.xlsx (freqüències i co-ocurrències ítem 22)\n",
     " - resultats_clusters_A3.xlsx i _B5.xlsx (perfils + casos per a entrevistes)\n",
     " - resultats_acord_escola.xlsx (ICC i consens intra-escola)\n",
     " - resultats_nivell_escola.xlsx (constructes agregats per escola + segmentadors)\n",
