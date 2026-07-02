@@ -83,7 +83,16 @@ for (p in paquets) {
 if (!exists("%>%")) stop("El paquet 'tidyverse' no s'ha carregat. Revisa la instal·lació.")
 
 # ---- 1. Carregar dades ----------------------------------------------------
-fitxer <- "Resultats de la mostra de l'enquesta.xlsx"   # <-- AJUSTA LA RUTA
+# S'obre un diàleg perquè triïs l'arxiu Excel amb el ratolí (evita problemes
+# de rutes amb barres \ o accents). Si executes el script sense entorn gràfic
+# (interactive() == FALSE), cal indicar la ruta manualment a la línia de sota.
+if (interactive()) {
+  cat("Selecciona el fitxer Excel de l'enquesta...\n")
+  fitxer <- file.choose()
+} else {
+  fitxer <- "Resultats de la mostra de l'enquesta.xlsx"   # <-- AJUSTA LA RUTA si cal
+}
+cat("Fitxer seleccionat:", fitxer, "\n")
 dades <- read_excel(fitxer, sheet = "enquesta-davaluació-de-la-coher")
 
 # Compatibilitat amb el fitxer "en brut" (92 columnes): si els subcargos venen
