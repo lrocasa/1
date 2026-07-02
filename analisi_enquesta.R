@@ -281,6 +281,11 @@ set.seed(2024)   # reproducibilitat dels IC
 # IC de la fiabilitat per bootstrap:
 #  >=3 ítems -> omega amb IC BCa via MBESS::ci.reliability
 #   =2 ítems -> IC percentil de Spearman-Brown (bootstrap manual)
+# Missatges de progrés + límit de temps de seguretat (TIMEOUT_OMEGA segons):
+# si el càlcul triga més del compte (p.ex. per una rèplica bootstrap amb
+# convergència difícil), s'abandona AQUEST càlcul concret (es retorna NA) i
+# el script CONTINUA en comptes de quedar-se penjat indefinidament.
+TIMEOUT_OMEGA <- 120
 omega_ic <- function(x, k, B = B_BOOT) {
   x <- x[stats::complete.cases(x), , drop = FALSE]
   if (k < 2) return(c(NA_real_, NA_real_))
@@ -292,10 +297,15 @@ omega_ic <- function(x, k, B = B_BOOT) {
     })
     return(unname(quantile(bs, c(.025, .975), na.rm = TRUE)))
   }
-  res <- tryCatch(
-    MBESS::ci.reliability(data = x, type = "omega",
-                          interval.type = "bca", B = B),
-    error = function(e) NULL)
+  cat(sprintf("    calculant IC bootstrap de l'omega (%d ítems, B=%d, timeout %ds)...\n",
+              k, B, TIMEOUT_OMEGA))
+  t0 <- Sys.time()
+  res <- tryCatch({
+    setTimeLimit(elapsed = TIMEOUT_OMEGA, transient = TRUE)
+    on.exit(setTimeLimit(elapsed = Inf, transient = TRUE), add = TRUE)
+    MBESS::ci.reliability(data = x, type = "omega", interval.type = "bca", B = B)
+  }, error = function(e) { cat("    -> omès (", conditionMessage(e), ")\n", sep=""); NULL })
+  cat(sprintf("    -> fet en %.1f segons\n", as.numeric(Sys.time() - t0, units = "secs")))
   if (is.null(res)) c(NA_real_, NA_real_) else c(res$ci.lower, res$ci.upper)
 }
 
