@@ -72,7 +72,7 @@
 # Aquest bloc instal·la els paquets que faltin i els carrega automàticament.
 # IMPORTANT: executa SEMPRE el script sencer des d'aquí (o fes 'Source').
 paquets <- c("tidyverse","readxl","psych","janitor","writexl",
-             "rstatix","effectsize","MBESS")
+             "rstatix","effectsize")
 for (p in paquets) {
   if (!requireNamespace(p, quietly = TRUE)) {
     install.packages(p, repos = "https://cloud.r-project.org")
@@ -287,35 +287,52 @@ for (nom in names(dimensions)) alpha_segur(dades, dimensions[[nom]], nom)
 B_BOOT <- 1000
 set.seed(2024)   # reproducibilitat dels IC
 
-# IC de la fiabilitat per bootstrap:
-#  >=3 ítems -> omega amb IC BCa via MBESS::ci.reliability
-#   =2 ítems -> IC percentil de Spearman-Brown (bootstrap manual)
-# Missatges de progrés + límit de temps de seguretat (TIMEOUT_OMEGA segons):
-# si el càlcul triga més del compte (p.ex. per una rèplica bootstrap amb
-# convergència difícil), s'abandona AQUEST càlcul concret (es retorna NA) i
-# el script CONTINUA en comptes de quedar-se penjat indefinidament.
-TIMEOUT_OMEGA <- 120
+# IC de la fiabilitat per bootstrap (mètode MANUAL, sense MBESS):
+#  >=3 ítems -> es repeteix psych::omega() sobre mostres bootstrap i es pren
+#               el percentil 2,5-97,5 de l'omega obtingut (IC percentil).
+#   =2 ítems -> IC percentil de Spearman-Brown (bootstrap manual).
+# Es descarta MBESS::ci.reliability: en escales amb fiabilitat baixa (p.ex.
+# Sensació d'energia) moltes rèpliques bootstrap generen matrius quasi-
+# singulars i el seu ajust (basat en un model més complex) pot trigar minuts
+# o quedar-se encallat. psych::omega() amb un sol factor és molt més ràpid
+# (uns 0,01-0,05 s per rèplica) i es controla amb un límit de TEMPS REAL
+# (comprovat entre iteracions, no dins de codi compilat -> sempre fiable).
+TIMEOUT_OMEGA <- 90       # segons màxims per a cada IC bootstrap
+MIN_REPS_OK   <- 100      # rèpliques vàlides mínimes per acceptar l'IC
 omega_ic <- function(x, k, B = B_BOOT) {
   x <- x[stats::complete.cases(x), , drop = FALSE]
+  n <- nrow(x)
   if (k < 2) return(c(NA_real_, NA_real_))
   if (k == 2) {
     bs <- replicate(B, {
-      idx <- sample(nrow(x), replace = TRUE)
+      idx <- sample(n, replace = TRUE)
       r <- suppressWarnings(cor(x[idx, 1], x[idx, 2]))
       2 * r / (1 + r)
     })
     return(unname(quantile(bs, c(.025, .975), na.rm = TRUE)))
   }
-  cat(sprintf("    calculant IC bootstrap de l'omega (%d ítems, B=%d, timeout %ds)...\n",
+  cat(sprintf("    calculant IC bootstrap de l'omega (%d ítems, fins a %d rèpliques, límit %ds)...\n",
               k, B, TIMEOUT_OMEGA))
   t0 <- Sys.time()
-  res <- tryCatch({
-    setTimeLimit(elapsed = TIMEOUT_OMEGA, transient = TRUE)
-    on.exit(setTimeLimit(elapsed = Inf, transient = TRUE), add = TRUE)
-    MBESS::ci.reliability(data = x, type = "omega", interval.type = "bca", B = B)
-  }, error = function(e) { cat("    -> omès (", conditionMessage(e), ")\n", sep=""); NULL })
-  cat(sprintf("    -> fet en %.1f segons\n", as.numeric(Sys.time() - t0, units = "secs")))
-  if (is.null(res)) c(NA_real_, NA_real_) else c(res$ci.lower, res$ci.upper)
+  vals <- numeric(0)
+  for (i in seq_len(B)) {
+    if (as.numeric(Sys.time() - t0, units = "secs") > TIMEOUT_OMEGA) {
+      cat(sprintf("    -> temps esgotat (%ds); s'usen les %d rèpliques vàlides obtingudes\n",
+                  TIMEOUT_OMEGA, length(vals)))
+      break
+    }
+    v <- tryCatch({
+      idx <- sample(n, replace = TRUE)
+      suppressWarnings(suppressMessages(
+        psych::omega(x[idx, , drop = FALSE], nfactors = 1, plot = FALSE,
+                     warnings = FALSE)$omega.tot))
+    }, error = function(e) NA_real_, warning = function(w) NA_real_)
+    if (is.finite(v) && v >= -0.5 && v <= 1.2) vals <- c(vals, v)   # descarta valors degenerats
+  }
+  cat(sprintf("    -> fet en %.1f segons (%d/%d rèpliques vàlides)\n",
+              as.numeric(Sys.time() - t0, units = "secs"), length(vals), B))
+  if (length(vals) < MIN_REPS_OK) return(c(NA_real_, NA_real_))
+  unname(quantile(vals, c(.025, .975), na.rm = TRUE))
 }
 
 fiab_omega <- function(df, items, etiqueta) {
