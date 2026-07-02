@@ -85,6 +85,18 @@ if (!exists("%>%")) stop("El paquet 'tidyverse' no s'ha carregat. Revisa la inst
 # ---- 1. Carregar dades ----------------------------------------------------
 fitxer <- "Resultats de la mostra de l'enquesta.xlsx"   # <-- AJUSTA LA RUTA
 dades <- read_excel(fitxer, sheet = "enquesta-davaluació-de-la-coher")
+
+# Compatibilitat amb el fitxer "en brut" (92 columnes): si els subcargos venen
+# dividits (Subcargo2/Subcargo3) s'unifiquen en 'Subcargo' (separats per '/'), i
+# s'eliminen les columnes extra ('Codi denominació') per recuperar l'estructura
+# estàndard de 89 columnes. Amb el fitxer de 89 columnes, aquest bloc no fa res.
+if (all(c("Subcargo2","Subcargo3") %in% names(dades))) {
+  dades$Subcargo <- apply(dades[, c("Subcargo","Subcargo2","Subcargo3")], 1, function(x) {
+    p <- unlist(strsplit(paste(x[!is.na(x)], collapse = "/"), "/")); p <- trimws(p)
+    p <- p[!p %in% c("0","","NA")]; paste(unique(p), collapse = " / ")
+  })
+}
+dades <- dades[, !(names(dades) %in% c("Subcargo2","Subcargo3","Codi denominació","Codi denominacio"))]
 cat("Dimensions:", nrow(dades), "files x", ncol(dades), "columnes\n")
 
 # ---- 2. Reanomenar columnes a noms curts ----------------------------------
