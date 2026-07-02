@@ -10,3 +10,6 @@
 *.html
 *.pdf
 /informe_enquesta_files/
+
+# Word de treball amb dades identificatives: no pujar
+*.docx
