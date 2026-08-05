@@ -1247,26 +1247,45 @@ write_xlsx(list("Hipotesi_FECC" = tests_hipotesi, "Dosi_resposta" = dosi_fecc),
 # ===========================================================================
 
 # ---- I1. Nivell jeràrquic (definit per l'usuària; multi-rol -> nivell més alt)
+# Casos d'ambigüitat resolts (revisió amb l'usuària):
+#  - Comitè d'ètica: prioritat més baixa (1) -> només defineix el nivell quan
+#    la persona no té cap altre càrrec de govern/operatiu (ja és el comportament
+#    per disseny; es manté). La pertinença es preserva sempre a rolind_Comité
+#    d'ètica (PART G), independentment d'aquest resum de nivell.
+#  - "Director General" com a Subcargo d'una Titularitat D'ESCOLA (no de la
+#    FECC central) NO ha de pujar a Governança de sistema: es neutralitza
+#    aquest token quan Cargo == "Titular" (vegeu el filtre més avall), de
+#    manera que el nivell final queda en Governança intermèdia (pel rol de
+#    Titularitat, que ja hi contribueix).
+#  - APSEC/CCAPAC/APPEC: reclassificats de "Comunitat i altres" a "Governança
+#    intermèdia", perquè són representants de titularitat en un centre concret.
 map_nivell <- function(x) {
   x <- trimws(x)
   dplyr::case_when(
-    grepl("Director.* [Gg]eneral", x) ~ "Governança de sistema",   # Dir. General/adjunt
+    grepl("Director.* [Gg]eneral", x) ~ "Governança de sistema",   # Dir. General/adjunt (FECC)
     grepl("Responsable", x)           ~ "Governança de sistema",   # Resp. de xarxa i Resp.
     grepl("GdE", x)                   ~ "Governança intermèdia",
     x == "Titular"                    ~ "Governança intermèdia",
     grepl("Tècnic", x)                ~ "Governança intermèdia",
+    x %in% c("APSEC","CCAPAC","APPEC") ~ "Governança intermèdia",  # representants de titularitat
     grepl("Directora|Subdirector|Cap [Ee]studis|Coordinador Infantil|Coordinador CF", x) ~ "Nucli operatiu",
     grepl("Professor|Mestre|Pastoral|TIC|Orientador|COCOBE", x) ~ "Nucli operatiu",
     x == "PAS"                        ~ "Nucli operatiu",
-    x %in% c("APSEC","CCAPAC","APPEC") | grepl("Comité d'ètica", x) ~ "Comunitat i altres",
+    grepl("Comité d'ètica", x)        ~ "Comunitat i altres",
     TRUE ~ NA_character_)             # 'FECC' genèric: el resolen els altres tokens (subcargo)
 }
 prio_niv <- c("Governança de sistema"=4, "Governança intermèdia"=3,
               "Nucli operatiu"=2, "Comunitat i altres"=1)
 dades$NivellJerarquic <- factor(vapply(seq_len(nrow(dades)), function(i) {
-  toks <- c(as.character(dades$Cargo[i]),
-            unlist(strsplit(as.character(dades$Subcargo[i]), "/", fixed = TRUE)))
+  cargo_i <- trimws(as.character(dades$Cargo[i]))
+  toks <- c(cargo_i, unlist(strsplit(as.character(dades$Subcargo[i]), "/", fixed = TRUE)))
   toks <- trimws(toks); toks <- toks[!toks %in% c("","0","NA","nan")]
+  if (cargo_i == "Titular") {
+    # "Director General" com a subcàrrec d'una Titularitat -> és un càrrec
+    # d'escola, no de la FECC central: es neutralitza (queda Governança
+    # intermèdia pel rol de Titularitat, no puja a Governança de sistema).
+    toks <- toks[!(toks != cargo_i & grepl("Director.* [Gg]eneral", toks))]
+  }
   ls <- stats::na.omit(map_nivell(toks))
   if (length(ls) == 0) NA_character_ else names(which.max(prio_niv[ls]))
 }, character(1)),
